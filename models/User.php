@@ -31,7 +31,7 @@ class User {
         $stmt->bindParam(":rol", $rol, PDO::PARAM_STR);
         
         $stmt->execute();
-        return $stmt->fetchColumn();
+        return (int) $stmt->fetchColumn();
 
     }
 
@@ -83,7 +83,7 @@ class User {
         }
 
         session_destroy();
-        return;
+        return true;
     }
 
     public function getByEmail($email) {
@@ -121,6 +121,19 @@ class User {
         }while($stmt->fetch(PDO::FETCH_ASSOC));
 
         return $codigo;
+    }
+
+    public function getByCode($codigo){
+        $sql="select id, nombre, email, codigo, activo from usuarios where codigo = :codigo limit 1";
+        $stmt=$this->db->prepare($sql);
+
+        $codigo=strtoupper(trim($codigo));
+
+        $stmt->bindParam(":codigo", $codigo, PDO::PARAM_STR);
+        $stmt->execute();
+
+        $user=$stmt->fetch(PDO::FETCH_ASSOC);
+        return $user ?:null;
     }
 }
 ?>

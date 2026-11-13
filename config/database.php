@@ -31,7 +31,11 @@ class Database {
         } catch (PDOException $e) {
 
             die("Error de conexión: " . $e->getMessage());
-
         }
     }
 }
+
+$database = new Database();
+
+/** @var PDO $db */
+$db = $database->connect();
