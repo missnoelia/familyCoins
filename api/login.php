@@ -1,61 +1,46 @@
-
 <?php
+declare(strict_types=1);
 
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/../config/bootstrap.php';
 
-require_once "../config/database.php";
-require_once "../models/User.php";
+api_metodo(['POST']);
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+$datos = api_datos();
 
-$data = json_decode(file_get_contents("php://input"), true);
+$email = strtolower(api_texto($datos['email'] ?? '', 150));
+$password = is_string($datos['password'] ?? null) ? $datos['password'] : '';
 
-if (!is_array($data)) {
-    $data = $_POST;
-}
-
-$email = trim($data["email"] ?? "");
-$password = $data["password"] ?? "";
-
-if ($email === "" || $password === "") {
-    http_response_code(400);
-    echo json_encode([
-        "success" => false,
-        "message" => "Introduce el email y la contraseña."
-    ]);
-    exit;
+if ($email === '' || $password === '') {
+    api_error(400, 'Introduce el email y la contraseña.');
 }
 
 try {
+    $db = api_db();
     $userModel = new User($db);
 
-    $user = $userModel->login($email, $password);
+    $usuario = $userModel->login($email, $password);
 
-    if ($user === false) {
-        http_response_code(401);
-        echo json_encode([
-            "success" => false,
-            "message" => "Email o contraseña incorrectos."
-        ]);
-        exit;
+    if ($usuario === false) {
+        api_error(401, 'Email o contraseña incorrectos.');
     }
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Sesión iniciada correctamente.",
-        "data" => [
-            "id" => $user["id"],
-            "nombre" => $user["nombre"],
-            "email" => $user["email"]
-        ]
-    ]);
+    $coupleModel = new Couple($db);
+    $pareja = $coupleModel->getPartner((int) $usuario['id']);
 
-} catch (PDOException $e) {
-    http_response_code(500);
-    echo json_encode([
-        "success" => false,
-        "message" => "Error al iniciar sesión."
+    api_responder(200, [
+        'success' => true,
+        'message' => 'Sesión iniciada correctamente.',
+        'data' => [
+            'id' => (int) $usuario['id'],
+            'nombre' => $usuario['nombre'],
+            'email' => $usuario['email'],
+            'codigo' => $usuario['codigo'],
+            'rol' => $usuario['rol'],
+            'tiene_pareja' => $pareja !== null,
+            'pareja' => $pareja,
+        ],
     ]);
+} catch (PDOException $e) {
+    error_log('FamilyCoins login: ' . $e->getMessage());
+    api_error(500, 'Error al iniciar sesión.');
 }

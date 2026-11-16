@@ -1,84 +1,51 @@
-
 <?php
+declare(strict_types=1);
 
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/../config/bootstrap.php';
 
-require_once "../config/database.php";
-require_once "../models/User.php";
+api_metodo(['POST']);
 
-$userModel = new User($db);
+$datos = api_datos();
 
-$data=json_decode(file_get_contents("php://input"), true);
+$nombre = api_texto($datos['nombre'] ?? '', 100);
+$email = strtolower(api_texto($datos['email'] ?? '', 150));
+$password = is_string($datos['password'] ?? null) ? $datos['password'] : '';
 
-if(!is_array($data)){
-    $data=$_POST;
+if ($nombre === '' || $email === '' || $password === '') {
+    api_error(400, 'Todos los campos son obligatorios.');
 }
 
-$nombre=trim($data["nombre"] ?? "");
-$email=trim($data["email"] ?? "");
-$password=$data["password"] ?? "";
-
-if($nombre==="" || $email==="" || $password===""){
-    http_response_code(400);
-    echo json_encode([
-        "success"=>false,
-        "message"=>"Todos los campos son obligatorios."
-    ]);
-    exit;
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    api_error(400, 'El email no es válido.');
 }
 
-if(!filter_var($email, FILTER_VALIDATE_EMAIL)){
-    http_response_code(400);
-    echo json_encode([
-        "success"=>false,
-        "message"=>"El email no es válido."
-    ]);
-    exit;
+if (strlen($password) < 4 || !preg_match('/[A-Z]/', $password)) {
+    api_error(400, 'La contraseña debe tener al menos 4 caracteres y una mayúscula.');
 }
 
-if(strlen($password)<4 || !preg_match('/[A-Z]/', $password)){
-    http_response_code(400);
-    echo json_encode([
-        "success"=>false,
-        "message"=>"La contraseña debe tener al menos 4 caracteres y una mayúscula."
-    ]);
-    exit;
-}
+try {
+    $db = api_db();
+    $userModel = new User($db);
 
-try{
+    $id = $userModel->register($nombre, $email, $password);
 
-    $id=$userModel->register($nombre, $email, $password);
-
-    if($id===false){
-        http_response_code(409);
-        echo json_encode([
-            "success"=>false,
-            "message"=>"El email ya está registrado."
-        ]);
-        exit;
+    if ($id === false) {
+        api_error(409, 'El email ya está registrado.');
     }
 
-    $user=$userModel->getByEmail($email);
+    $usuario = $userModel->getById($id);
 
-    http_response_code(201);
-    echo json_encode([
-        "success"=>true,
-        "message"=>"Usuario registrado correctamente.",
-        "data"=>[
-            "id"=>$id,
-            "nombre"=>$user["nombre"],
-            "email"=>$user["email"],
-            "codigo"=>$user["codigo"]
-        ]
+    api_responder(201, [
+        'success' => true,
+        'message' => 'Usuario registrado correctamente.',
+        'data' => [
+            'id' => $id,
+            'nombre' => $usuario['nombre'] ?? $nombre,
+            'email' => $usuario['email'] ?? $email,
+            'codigo' => $usuario['codigo'] ?? null,
+        ],
     ]);
-
-}catch(PDOException $e){
-
-    http_response_code(500);
-    echo json_encode([
-        "success"=>false,
-        "message"=>"No se ha podido registrar el usuario."
-    ]);
+} catch (PDOException $e) {
+    error_log('FamilyCoins register: ' . $e->getMessage());
+    api_error(500, 'No se ha podido registrar el usuario.');
 }
-
-?>

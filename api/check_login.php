@@ -1,72 +1,63 @@
-
 <?php
+declare(strict_types=1);
 
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/../config/bootstrap.php';
 
-session_start();
+api_metodo(['GET']);
 
-require_once "../config/database.php";
+$id = api_sesion_id();
 
-if (!isset($_SESSION["usuario_id"])) {
-    echo json_encode([
-        "success" => true,
-        "data" => [
-            "logged" => false,
-            "usuario" => null,
-            "tiene_pareja" => false
-        ]
-    ]);
-    exit;
-}
-
-$id = $_SESSION["usuario_id"];
-
-$sql = "SELECT id, nombre
-        FROM usuarios
-        WHERE id = :id AND activo = TRUE";
-
-$stmt = $db->prepare($sql);
-$stmt->bindParam(":id", $id, PDO::PARAM_INT);
-$stmt->execute();
-
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$user) {
-    $_SESSION = [];
-    session_destroy();
-
-    echo json_encode([
-        "success" => true,
-        "data" => [
-            "logged" => false,
-            "usuario" => null,
-            "tiene_pareja" => false
-        ]
-    ]);
-    exit;
-}
-
-$sql = "SELECT id
-        FROM parejas
-        WHERE usuario_1_id = :id1
-        OR usuario_2_id = :id2
-        LIMIT 1";
-
-$stmt = $db->prepare($sql);
-$stmt->bindParam(":id1", $id, PDO::PARAM_INT);
-$stmt->bindParam(":id2", $id, PDO::PARAM_INT);
-$stmt->execute();
-
-$tienePareja = $stmt->fetch(PDO::FETCH_ASSOC) !== false;
-
-echo json_encode([
-    "success" => true,
-    "data" => [
-        "logged" => true,
-        "usuario" => [
-            "id" => $user["id"],
-            "nombre" => $user["nombre"]
+if ($id === null) {
+    api_responder(200, [
+        'success' => true,
+        'data' => [
+            'logged' => false,
+            'usuario' => null,
+            'tiene_pareja' => false,
+            'pareja' => null,
         ],
-        "tiene_pareja" => $tienePareja
-    ]
-]);
+    ]);
+}
+
+try {
+    $db = api_db();
+    $userModel = new User($db);
+    $usuario = $userModel->getById($id);
+
+    if ($usuario === null || !User::esActivo($usuario['activo'] ?? false)) {
+        $userModel->logout();
+
+        api_responder(200, [
+            'success' => true,
+            'data' => [
+                'logged' => false,
+                'usuario' => null,
+                'tiene_pareja' => false,
+                'pareja' => null,
+            ],
+        ]);
+    }
+
+    $coupleModel = new Couple($db);
+    $pareja = $coupleModel->getPartner($id);
+
+    api_responder(200, [
+        'success' => true,
+        'data' => [
+            'logged' => true,
+            'usuario' => [
+                'id' => (int) $usuario['id'],
+                'nombre' => $usuario['nombre'],
+                'email' => $usuario['email'],
+                'codigo' => $usuario['codigo'],
+                'rol' => $usuario['rol'],
+                'saldo_inicial' => $usuario['saldo_inicial'],
+            ],
+            'tiene_pareja' => $pareja !== null,
+            'pareja' => $pareja,
+        ],
+    ]);
+} catch (PDOException $e) {
+    error_log('FamilyCoins check_login: ' . $e->getMessage());
+    api_error(500, 'No se ha podido comprobar la sesión.');
+}
