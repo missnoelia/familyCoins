@@ -1,0 +1,268 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7ef">
+  <title>FamilyCoins · Nuestro jardín</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <a class="brand" href="#inicio">
+      <span class="brand-mark">✿</span>
+      <span>family<span class="brand-accent">coins</span><small>GROW TOGETHER</small></span>
+    </a>
+
+    <nav class="main-nav" aria-label="Navegación principal">
+      <a class="active" href="#jardin">Mi jardín</a>
+      <a href="#actividad">Actividad</a>
+      <a href="#estadisticas">Estadísticas</a>
+      <a href="#recuerdos">Recuerdos</a>
+    </nav>
+
+    <div class="top-actions">
+      <span class="user-chip"><span class="avatar">L</span><b>Laura</b></span>
+      <button class="icon-button" id="theme-toggle" aria-label="Cambiar tema">☾</button>
+    </div>
+  </header>
+
+  <main id="inicio">
+
+    <section class="welcome">
+      <div>
+        <p class="eyebrow">✦ VUESTRO ESPACIO COMPARTIDO</p>
+        <h1>Un jardín que crece <em>con vosotros.</em></h1>
+        <p class="intro-copy">Cada pequeño plan suma. Cuidad vuestras plantas y guardad lo bonito del camino.</p>
+      </div>
+      <div class="today-pill">☀ <span id="today-label"></span></div>
+    </section>
+
+    <section class="garden-panel panel" id="jardin">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">VUESTRO JARDÍN</p>
+          <h2>Dos plantas, una historia</h2>
+          <p class="muted">Cada uno elige su planta y la hace crecer con su constancia.</p>
+        </div>
+        <div class="weather-pill">
+          ☀ <span><b>Día soleado</b><small>Ideal para cuidar vuestro jardín</small></span>
+        </div>
+      </div>
+
+      <div class="garden-scene" id="garden-scene">
+        <div class="sun"></div>
+        <div class="cloud cloud-one"></div>
+        <div class="cloud cloud-two"></div>
+        <span class="scene-flower flower-one">✿</span>
+        <span class="scene-flower flower-two">✽</span>
+        <span class="scene-butterfly">🦋</span>
+
+        <article class="plant-card coral-card">
+          <div class="card-label-row">
+            <span>TU ESPACIO</span>
+            <button class="edit-plant" data-person="me" aria-label="Cambiar mi planta">✎</button>
+          </div>
+          <div class="plant-display">
+            <div class="plant-aura"></div>
+            <span class="plant-emoji" id="plant-me">🌷</span>
+            <span class="level-pill" id="level-me">Nivel 1</span>
+          </div>
+          <h3 id="name-me">Laura</h3>
+          <p class="plant-species" id="species-me">Tulipán</p>
+          <p class="streak-line">🔥 <b id="streak-me">0 días</b><span>de racha</span></p>
+          <div class="progress-track"><span id="progress-me"></span></div>
+          <small class="progress-caption" id="progress-label-me">Empieza a cuidar tu planta</small>
+          <div class="balance-line">
+            <span class="coin-icon">F</span>
+            <strong id="balance-me">420</strong>
+            <small>FamilyCoins</small>
+          </div>
+        </article>
+
+        <div class="garden-center">
+          <div class="floating-coins"><span>🪙</span><span>🪙</span><span>🪙</span></div>
+          <div class="together-card">
+            <span class="heart">♡</span>
+            <b>JUNTOS</b>
+            <small id="shared-streak">0 días cuidando el jardín</small>
+          </div>
+          <div class="garden-path"></div>
+        </div>
+
+        <article class="plant-card green-card">
+          <div class="card-label-row">
+            <span>TU PAREJA</span>
+            <button class="edit-plant" data-person="partner" aria-label="Cambiar planta de mi pareja">✎</button>
+          </div>
+          <div class="plant-display">
+            <div class="plant-aura"></div>
+            <span class="plant-emoji" id="plant-partner">🪴</span>
+            <span class="level-pill" id="level-partner">Nivel 1</span>
+          </div>
+          <h3 id="name-partner">Pablo</h3>
+          <p class="plant-species" id="species-partner">Monstera</p>
+          <p class="streak-line">🔥 <b id="streak-partner">0 días</b><span>de racha</span></p>
+          <div class="progress-track"><span id="progress-partner"></span></div>
+          <small class="progress-caption" id="progress-label-partner">Empieza a cuidar tu planta</small>
+          <div class="balance-line">
+            <span class="coin-icon">F</span>
+            <strong id="balance-partner">310</strong>
+            <small>FamilyCoins</small>
+          </div>
+        </article>
+
+        <div class="hill hill-back"></div>
+        <div class="hill hill-front"></div>
+      </div>
+
+      <div class="garden-footer">
+        <div>
+          <span class="footer-sprout">🌱</span>
+          <span><b>Un día cada vez</b><small>Registra tu cuidado diario para mantener viva la racha.</small></span>
+        </div>
+        <button class="button button-primary" id="care-today">＋ Cuidar el jardín hoy</button>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <article class="summary-card"><span class="summary-icon">◉</span><div><small>Coins entre los dos</small><strong id="total-balance">730</strong><small>Saldo conjunto</small></div></article>
+      <article class="summary-card"><span class="summary-icon">↗</span><div><small>Planes registrados</small><strong id="event-count">0</strong><small>Momentos guardados</small></div></article>
+      <article class="summary-card"><span class="summary-icon">✦</span><div><small>Racha compartida</small><strong id="shared-count">0 días</strong><small>Seguid así</small></div></article>
+      <article class="summary-card"><span class="summary-icon">♡</span><div><small>Próxima fecha especial</small><strong id="anniversary-count">—</strong><small id="anniversary-caption">Preparad algo bonito</small></div></article>
+    </section>
+
+    <section class="content-grid" id="actividad">
+      <article class="panel activity-panel">
+        <div class="panel-heading compact">
+          <div><p class="eyebrow">VUESTROS MOVIMIENTOS</p><h2>Actividad reciente</h2></div>
+          <button class="text-button" id="reset-filters">Limpiar filtros ↗</button>
+        </div>
+        <div class="filters">
+          <input id="search-events" type="search" placeholder="Buscar un plan...">
+          <select id="filter-person">
+            <option value="all">Los dos</option>
+            <option value="me">Laura</option>
+            <option value="partner">Pablo</option>
+          </select>
+          <select id="filter-type">
+            <option value="all">Todos los movimientos</option>
+            <option value="income">Ingresos</option>
+            <option value="expense">Gastos</option>
+          </select>
+        </div>
+        <div id="event-list" class="event-list"></div>
+        <p id="events-empty" class="empty-state" hidden>No hay movimientos que coincidan con la búsqueda.</p>
+      </article>
+
+      <article class="panel form-panel">
+        <p class="eyebrow">UN NUEVO RECUERDO</p>
+        <h2>Apuntad un movimiento</h2>
+        <p class="muted">Registrad una experiencia o ajustad vuestras monedas.</p>
+        <form id="event-form">
+          <label>Nombre del plan<input name="title" maxlength="70" placeholder="Ej. Cena especial" required></label>
+          <div class="form-two">
+            <label>Coins<input name="amount" type="number" min="1" step="1" placeholder="25" required></label>
+            <label>Fecha<input name="date" type="date" required></label>
+          </div>
+          <div class="form-two">
+            <label>Persona<select name="person"><option value="me">Laura</option><option value="partner">Pablo</option></select></label>
+            <label>Movimiento<select name="type"><option value="expense">Gasto −</option><option value="income">Ingreso +</option></select></label>
+          </div>
+          <button class="button button-primary full-button" type="submit">Guardar movimiento <span>→</span></button>
+        </form>
+        <small class="form-note">Demo local: estos datos solo se guardan en este navegador.</small>
+      </article>
+    </section>
+
+    <section class="content-grid lower-grid" id="estadisticas">
+      <article class="panel chart-panel">
+        <div class="panel-heading compact">
+          <div><p class="eyebrow">VUESTRA EVOLUCIÓN</p><h2>El jardín en números</h2></div>
+          <select id="chart-period"><option value="month">Este mes</option><option value="all">Todo el periodo</option></select>
+        </div>
+        <div class="chart-wrap"><canvas id="activity-chart"></canvas></div>
+      </article>
+
+      <article class="panel anniversary-panel" id="recuerdos">
+        <p class="eyebrow">FECHAS PARA CELEBRAR</p>
+        <h2>Un jardín lleno de recuerdos</h2>
+        <div class="bouquet">💐</div>
+        <strong id="anniversary-message">Guardad vuestra fecha especial</strong>
+        <p class="muted">Hay fechas que merecen florecer cada año.</p>
+        <button class="button button-soft" id="edit-anniversary">Configurar fecha especial</button>
+      </article>
+    </section>
+
+    <section class="bottom-grid">
+      <article class="panel shop-panel" id="tienda">
+        <div class="panel-heading compact">
+          <div><p class="eyebrow">PERSONALIZAD VUESTRO RINCÓN</p><h2>Tienda del jardín</h2><p class="muted">Comprad adornos con vuestros FamilyCoins.</p></div>
+          <span class="shop-wallet">🪙 <b id="shop-wallet">730</b></span>
+        </div>
+        <div class="shop-grid" id="shop-grid"></div>
+      </article>
+
+      <article class="panel achievements-panel">
+        <p class="eyebrow">PEQUEÑOS LOGROS</p>
+        <h2>Vuestros hitos</h2>
+        <div id="achievement-list" class="achievement-list"></div>
+      </article>
+    </section>
+
+    <section class="panel memories-panel">
+      <div class="panel-heading compact">
+        <div><p class="eyebrow">VUESTRO ÁLBUM</p><h2>Recuerdos que florecen</h2><p class="muted">Guardad una nota de esos momentos que queréis recordar.</p></div>
+      </div>
+      <form id="memory-form" class="memory-form">
+        <input name="title" maxlength="60" placeholder="Título del recuerdo" required>
+        <input name="date" type="date" required>
+        <input name="note" maxlength="180" placeholder="¿Qué queréis recordar?" required>
+        <button class="button button-primary" type="submit">Guardar recuerdo</button>
+      </form>
+      <div id="memory-list" class="memory-list"></div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <a class="brand" href="#inicio"><span class="brand-mark">✿</span><span>family<span class="brand-accent">coins</span></span></a>
+    <p>Creciendo juntos, un plan a la vez.</p>
+    <small>FamilyCoins · Demo Front-End</small>
+  </footer>
+</div>
+
+<dialog id="plant-dialog" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Cerrar">×</button></form>
+  <p class="eyebrow">VUESTRO JARDÍN, VUESTRAS REGLAS</p>
+  <h2 id="plant-dialog-title">Elegid vuestra planta</h2>
+  <p class="muted">Escoged la especie que queréis cuidar.</p>
+  <div class="plant-choices" id="plant-choices"></div>
+  <button class="button button-primary full-button" id="save-plant" type="button">Guardar planta</button>
+</dialog>
+
+<dialog id="anniversary-dialog" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Cerrar">×</button></form>
+  <p class="eyebrow">UNA FECHA PARA RECORDAR</p>
+  <h2>Vuestro aniversario</h2>
+  <form id="anniversary-form">
+    <label>Nombre<input name="title" maxlength="50" required></label>
+    <label>Fecha<input name="date" type="date" required></label>
+    <button class="button button-primary full-button" type="submit">Guardar fecha</button>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
