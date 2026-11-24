@@ -1,0 +1,60 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vincular pareja | FamilyCoins</title>
+
+    <link rel="stylesheet" href="css/auth.css">
+    <script src="js/vincular.js" defer></script>
+</head>
+
+<body>
+
+    <main class="auth-container">
+
+        <section class="auth-card">
+
+            <div class="auth-logo">💚</div>
+
+            <h1>¡Unamos nuestros jardines!</h1>
+
+            <p>
+                Introduce el código personal de tu pareja
+                para compartir vuestro jardín.
+            </p>
+
+            <div class="my-code-box">
+                <span>Tu código personal</span>
+                <strong id="my-code">Cargando...</strong>
+            </div>
+
+            <form id="vincular-form">
+
+                <label for="codigo">Código de tu pareja</label>
+
+                <input
+                    type="text"
+                    id="codigo"
+                    name="codigo"
+                    placeholder="ABC1234"
+                    maxlength="7"
+                    pattern="[A-Za-z]{3}[0-9]{4}"
+                    required
+                >
+
+                <p id="vincular-message" role="alert"></p>
+
+                <button type="submit" id="vincular-button">
+                    Vincular pareja
+                </button>
+
+            </form>
+
+        </section>
+
+    </main>
+
+</body>
+</html>
