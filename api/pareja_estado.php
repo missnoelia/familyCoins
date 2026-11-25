@@ -8,12 +8,15 @@ api_metodo(['GET']);
 try {
     $usuario = api_usuario_actual();
     $db = api_db();
-    $pareja = (new Couple($db))->getPartner((int) $usuario['id']);
+    $coupleModel = new Couple($db);
+    $pareja = $coupleModel->getPartner((int) $usuario['id']);
+    $parejaInfo = $coupleModel->getParejaDeUsuario((int) $usuario['id']);
 
     api_responder(200, [
         'success' => true,
         'data' => [
             'pareja' => $pareja,
+            'pareja_info' => $parejaInfo,
         ],
     ]);
 } catch (PDOException $e) {

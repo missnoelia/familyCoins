@@ -31,12 +31,14 @@ try {
     }
 
     $parejaId = (new Couple($db))->link($miId, $otroId);
+    $parejaInfo = (new Couple($db))->getParejaDeUsuario($miId);
 
     api_responder(200, [
         'success' => true,
         'message' => 'Pareja vinculada correctamente.',
         'data' => [
             'pareja_id' => $parejaId,
+            'fecha_aniversario' => $parejaInfo['fecha_aniversario'] ?? null,
             'usuario' => [
                 'id' => $otroId,
                 'nombre' => $otroUsuario['nombre'],

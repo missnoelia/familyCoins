@@ -28,6 +28,10 @@ try {
         api_error(409, 'No se puede modificar un evento anulado.');
     }
 
+    if (Event::esSistema($evento['origen'] ?? 'manual')) {
+        api_error(409, 'Los eventos generados por la tienda, las tareas, los bonos o la planta no se pueden modificar.');
+    }
+
     // Los campos no enviados conservan su valor actual.
     $usuarioDestino = array_key_exists('usuario_id', $datos)
         ? api_entero_positivo($datos['usuario_id'])

@@ -79,6 +79,7 @@ try {
             'fecha' => $fecha,
             'coste' => $coste,
             'efecto' => $efecto,
+            'origen' => 'manual',
             'anulado' => false,
         ],
     ]);
