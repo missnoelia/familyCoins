@@ -8,7 +8,7 @@ Cada evento pertenece a una persona y tiene un efecto:
 - **resta**: el coste se descuenta del saldo de esa persona.
 - **suma**: el coste se suma al saldo de su pareja.
 
-El Backend está desarrollado en **PHP 8** y utiliza **PostgreSQL**. La
+El Backend está desarrollado en **PHP 8** y utiliza **MySQL/MariaDB**. La
 comunicación con el Frontend se hace mediante una API REST que devuelve siempre
 JSON.
 
@@ -25,7 +25,7 @@ administración requieren rol `superadmin`.
 - **Formato de respuesta:** JSON (`Content-Type: application/json`).
 - **Métodos:** `GET` para consultas y `POST` para altas, modificaciones y bajas.
 - **Autenticación:** sesiones PHP.
-- **Base de datos:** PostgreSQL, mediante PDO.
+- **Base de datos:** MySQL/MariaDB, mediante PDO (`pdo_mysql`).
 - **Moneda única:** las compras de la tienda, las tareas, el cambio de planta y
   los bonos usan las mismas **coins** del saldo. No hay puntos separados.
 - **Zona horaria:** las fechas se envían y se devuelven como `YYYY-MM-DD`. La
@@ -1462,8 +1462,11 @@ datos responde o `503` si no:
 
 ## 20. Notas sobre `db/schema.sql`
 
-`db/schema.sql` es el esquema canónico y ya incluye todas las tablas de esta
-fase:
+`db/schema.sql` es el esquema canónico para MySQL/MariaDB (probado con MariaDB
+10.4 de XAMPP) y ya incluye todas las tablas de esta fase. Todas las tablas usan
+el motor `InnoDB` y el juego de caracteres `utf8mb4` con collation
+`utf8mb4_unicode_ci`. Los identificadores son `INT AUTO_INCREMENT` y las marcas
+de tiempo son `DATETIME DEFAULT CURRENT_TIMESTAMP`.
 
 - **Racha:** `pareja_streaks` (contador por pareja) y `pareja_streak_checkins`
   (una entrada por usuario y día), con el índice `idx_streak_checkins_fecha`.
@@ -1473,7 +1476,8 @@ fase:
 - **Tienda:** `tienda_items`. Los artículos globales tienen `clave` y
   `pareja_id NULL`; los personalizados tienen `pareja_id`. Incluye
   `idx_tienda_items_pareja`. El esquema inserta los 11 artículos globales con
-  `ON CONFLICT (clave) DO NOTHING`.
+  `ON DUPLICATE KEY UPDATE`, de modo que el script se puede reimportar sin
+  duplicarlos.
 - **Tareas:** `pareja_tareas`, con estado, solicitante, destinatario, evento
   asociado e `idx_pareja_tareas_pareja`.
 - **Bonos:** `pareja_bonos`, con la restricción única

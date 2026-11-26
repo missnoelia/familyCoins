@@ -53,15 +53,14 @@ class Couple
 
             $stmt = $this->db->prepare(
                 'INSERT INTO parejas (usuario_1_id, usuario_2_id, fecha_aniversario)
-                 VALUES (:usuario1, :usuario2, :fecha_aniversario)
-                 RETURNING id'
+                 VALUES (:usuario1, :usuario2, :fecha_aniversario)'
             );
             $stmt->bindValue(':usuario1', $usuario1, PDO::PARAM_INT);
             $stmt->bindValue(':usuario2', $usuario2, PDO::PARAM_INT);
             $stmt->bindValue(':fecha_aniversario', api_hoy()->format('Y-m-d'), PDO::PARAM_STR);
             $stmt->execute();
 
-            $parejaId = (int) $stmt->fetchColumn();
+            $parejaId = (int) $this->db->lastInsertId();
 
             $this->db->commit();
 
@@ -71,7 +70,7 @@ class Couple
                 $this->db->rollBack();
             }
 
-            if ($e instanceof PDOException && $e->getCode() === '23505') {
+            if ($e instanceof PDOException && Database::esConflictoUnico($e)) {
                 throw new ApiException('Uno de los usuarios ya tiene pareja.', 409);
             }
 
@@ -158,15 +157,14 @@ class Couple
 
             $stmt = $this->db->prepare(
                 'INSERT INTO parejas (usuario_1_id, usuario_2_id, fecha_aniversario)
-                 VALUES (:usuario1, :usuario2, :fecha_aniversario)
-                 RETURNING id'
+                 VALUES (:usuario1, :usuario2, :fecha_aniversario)'
             );
             $stmt->bindValue(':usuario1', $usuario1, PDO::PARAM_INT);
             $stmt->bindValue(':usuario2', $usuario2, PDO::PARAM_INT);
             $stmt->bindValue(':fecha_aniversario', api_hoy()->format('Y-m-d'), PDO::PARAM_STR);
             $stmt->execute();
 
-            $parejaId = (int) $stmt->fetchColumn();
+            $parejaId = (int) $this->db->lastInsertId();
 
             $this->db->commit();
 
@@ -176,7 +174,7 @@ class Couple
                 $this->db->rollBack();
             }
 
-            if ($e instanceof PDOException && $e->getCode() === '23505') {
+            if ($e instanceof PDOException && Database::esConflictoUnico($e)) {
                 throw new ApiException('No se ha podido crear la pareja por un conflicto de datos.', 409);
             }
 

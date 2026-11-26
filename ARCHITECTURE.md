@@ -1,6 +1,6 @@
 # Arquitectura
 
-Descripción de cómo está organizado CoupleCoins.
+Descripción de cómo está organizado FamilyCoins.
 
 ## Visión general
 
@@ -8,30 +8,39 @@ FamilyCoins es una aplicación web con tres partes:
 
 1. **Frontend:** la interfaz que ve el usuario en el navegador.
 2. **Backend:** la API que contiene la lógica y accede a los datos.
-3. **Base de datos:** PostgreSQL, donde se guarda toda la información.
+3. **Base de datos:** MySQL/MariaDB, donde se guarda toda la información.
 
 ```
-Navegador (Frontend)  →  API REST (Backend)  →  PostgreSQL
+Navegador (Frontend)  →  API REST (Backend)  →  MySQL/MariaDB
 ```
 
-El frontend nunca habla directamente con la base de datos: siempre pasa por el backend.
+El frontend nunca habla directamente con la base de datos: siempre pasa por el
+backend.
 
 ## Tecnologías
 
 | Parte | Tecnología |
 |---|---|
-| Frontend | (por ejemplo: React, HTML/CSS/JS) |
-| Backend | (por ejemplo: Node.js + Express) |
-| Base de datos | PostgreSQL |
+| Frontend | HTML, CSS y JavaScript |
+| Backend | PHP 8.2 (sin frameworks), PDO y sesiones |
+| Base de datos | MySQL/MariaDB con `utf8mb4` |
 | Control de versiones | Git y GitHub |
 
 ## Estructura de carpetas
 
 ```
 familyCoins/
-├── backend/          # API y lógica del servidor
-├── frontend/         # Interfaz de usuario
-├── database.sql      # Script para crear las tablas
+├── admin/            # Panel de administración
+├── api/              # Endpoints JSON de la API
+├── config/           # Arranque común y conexión a la base de datos
+├── controllers/      # Lógica de las pantallas
+├── css/              # Estilos
+├── db/               # Esquema SQL (db/schema.sql)
+├── js/               # JavaScript del frontend
+├── models/           # Acceso a datos y reglas de negocio
+├── tests/            # Pruebas de modelos y HTTP
+├── app.php           # Aplicación principal
+├── index.php         # Entrada del frontend
 ├── README.md
 ├── INSTALL.md
 ├── API.md
@@ -41,24 +50,49 @@ familyCoins/
 
 ## Backend
 
-Explica aquí cómo se organiza por dentro. Por ejemplo:
+- **api/:** un archivo por endpoint. Valida la petición, llama al modelo
+  correspondiente y devuelve JSON con `api_responder()` o `api_error()`.
+- **config/bootstrap.php:** arranque común. Configura la sesión, las cabeceras
+  JSON, las validaciones compartidas y las respuestas de error.
+- **config/database.php:** clase `Database`. Crea la conexión PDO con MySQL/MariaDB
+  y ofrece el helper `esConflictoUnico()` para detectar duplicados.
+- **models/:** consultas SQL y reglas de negocio. Cada modelo recibe la conexión
+  PDO y encapsula su tabla.
+- **controllers/:** lógica de las pantallas del frontend.
+- **tests/:** `models_test.php` (pruebas de modelos) y `security_smoke.php`
+  (pruebas HTTP contra un servidor local).
 
-- **routes/:** define las URLs de la API.
-- **controllers/:** recibe las peticiones y devuelve respuestas.
-- **models/ o services/:** consultas a la base de datos y lógica.
-- **middleware/:** comprobaciones previas, como la autenticación.
+Los modelos principales son:
+
+| Modelo | Responsabilidad |
+|---|---|
+| `User` | Usuarios, registro, login y administración |
+| `Couple` | Parejas y aniversario |
+| `Predefined` | Eventos predefinidos |
+| `Event` | Eventos e impacto en el saldo |
+| `Recharge` | Recargas de coins |
+| `Balance` | Saldos individuales y conjunto |
+| `Stats` | Estadísticas por periodo |
+| `Streak` | Racha compartida de la pareja |
+| `Plant` | Planta compartida y sus etapas |
+| `Shop` | Tienda y tareas de la pareja |
+| `Bonus` | Bonos de cumpleaños y aniversario |
 
 ## Frontend
 
-- **pages/ o views/:** pantallas de la aplicación.
-- **components/:** piezas reutilizables.
-- **services/:** llamadas a la API.
+- **index.php, login.php, registro.php, vincular.php:** pantallas principales.
+- **admin/:** panel de administración.
+- **js/:** llamadas a la API y comportamiento de la interfaz.
+- **css/:** estilos.
 
 ## Autenticación y roles
 
 - El usuario inicia sesión con email y contraseña.
 - Las contraseñas se guardan cifradas (`password_hash`), nunca en texto plano.
 - Cada usuario tiene un `rol`, que determina qué acciones puede hacer.
+- Los endpoints de administración exigen el rol `superadmin`.
+- La sesión se guarda en una cookie `HttpOnly` y `SameSite=Lax`, y el ID se
+  regenera al iniciar sesión y al cambiar la contraseña.
 
 ## Flujo de datos de ejemplo
 
@@ -72,7 +106,8 @@ Registrar un evento:
 
 ## Base de datos
 
-El diseño completo de tablas y relaciones está en [DB_DESIGN.md](DB_DESIGN.md).
+El diseño completo de tablas y relaciones está en [DB_DESIGN.md](DB_DESIGN.md) y
+el script canónico en [db/schema.sql](db/schema.sql).
 
 ## Organización del trabajo en Git
 
@@ -83,4 +118,5 @@ El diseño completo de tablas y relaciones está en [DB_DESIGN.md](DB_DESIGN.md)
 | feature/backend | Desarrollo del backend |
 | feature/frontend | Desarrollo del frontend |
 
-El trabajo se hace en las ramas `feature/*` y se une a `develop` mediante Pull Requests.
+El trabajo se hace en las ramas `feature/*` y se une a `develop` mediante Pull
+Requests.

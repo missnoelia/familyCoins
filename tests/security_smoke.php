@@ -7,19 +7,17 @@ declare(strict_types=1);
  * Vacía la base de datos indicada, así que solo se ejecuta contra una base de
  * pruebas. Requiere que el servidor PHP esté levantado:
  *
- *   php -d extension=pdo_pgsql -S 127.0.0.1:8099 -t .
+ *   php -S 127.0.0.1:8099 -t .
  *
- * Uso:
+ * Uso (XAMPP, root sin contraseña):
  *   set DB_NAME=familycoins_test
- *   set DB_USER=familycoins_app
- *   set DB_PASS=FamilyCoinsLocal2026
  *   set TEST_BASE_URL=http://127.0.0.1:8099
- *   php -d extension=pdo_pgsql tests/security_smoke.php
+ *   php tests/security_smoke.php
  */
 
 require_once __DIR__ . '/../config/database.php';
 
-$dbName = getenv('DB_NAME') === false ? 'couplecoins_db' : getenv('DB_NAME');
+$dbName = getenv('DB_NAME') === false ? 'familycoins_test' : getenv('DB_NAME');
 
 if (stripos($dbName, 'test') === false) {
     fwrite(STDERR, "ABORTADO: DB_NAME debe apuntar a una base de datos de pruebas.\n");
@@ -365,7 +363,7 @@ try {
     comprobar('check_login incluye la racha', (int) datos($checkLogin, 'data.streak.racha_actual') === 1);
 
     $registros = (int) $db->query(
-        "SELECT COUNT(*) FROM pareja_streak_checkins WHERE fecha = DATE '{$hoyRacha}'"
+        "SELECT COUNT(*) FROM pareja_streak_checkins WHERE fecha = '{$hoyRacha}'"
     )->fetchColumn();
     comprobar('solo hay dos check-ins hoy, uno por persona', $registros === 2);
 

@@ -142,8 +142,7 @@ class Shop
                 'INSERT INTO tienda_items
                     (pareja_id, tipo, nombre, descripcion, coste, activo, creado_por_id)
                  VALUES
-                    (:pareja_id, :tipo, :nombre, :descripcion, :coste, TRUE, :creado_por_id)
-                 RETURNING id'
+                    (:pareja_id, :tipo, :nombre, :descripcion, :coste, TRUE, :creado_por_id)'
             );
             $stmt->bindValue(':pareja_id', $pareja['id'], PDO::PARAM_INT);
             $stmt->bindValue(':tipo', $tipo, PDO::PARAM_STR);
@@ -159,7 +158,7 @@ class Shop
             $stmt->bindValue(':creado_por_id', $usuarioId, PDO::PARAM_INT);
             $stmt->execute();
 
-            $itemId = (int) $stmt->fetchColumn();
+            $itemId = (int) $this->db->lastInsertId();
             $this->db->commit();
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -242,8 +241,23 @@ class Shop
         $stmt = $this->db->prepare(
             'UPDATE tienda_items
              SET activo = FALSE
-             WHERE id = :id AND pareja_id = :pareja_id AND activo = TRUE
-             RETURNING id, pareja_id, tipo, nombre, descripcion, coste, activo, creado_por_id'
+             WHERE id = :id AND pareja_id = :pareja_id AND activo = TRUE'
+        );
+        $stmt->bindValue(':id', $itemId, PDO::PARAM_INT);
+        $stmt->bindValue(':pareja_id', $pareja['id'], PDO::PARAM_INT);
+        $stmt->execute();
+
+        if ($stmt->rowCount() === 0) {
+            throw new ApiException('El artículo no existe, ya está desactivado o es global.', 404);
+        }
+
+        $stmt = $this->db->prepare(
+            'SELECT i.*, u.nombre AS creado_por_nombre,
+                    CASE WHEN i.pareja_id IS NULL THEN \'global\' ELSE \'pareja\' END AS alcance
+             FROM tienda_items i
+             LEFT JOIN usuarios u ON u.id = i.creado_por_id
+             WHERE i.id = :id AND i.pareja_id = :pareja_id
+             LIMIT 1'
         );
         $stmt->bindValue(':id', $itemId, PDO::PARAM_INT);
         $stmt->bindValue(':pareja_id', $pareja['id'], PDO::PARAM_INT);
@@ -254,8 +268,6 @@ class Shop
         if ($item === false) {
             throw new ApiException('El artículo no existe, ya está desactivado o es global.', 404);
         }
-
-        $item['alcance'] = 'pareja';
 
         return self::normalizarItem($item);
     }
@@ -321,8 +333,7 @@ class Shop
                      solicitante_id, destinatario_id, evento_id)
                  VALUES
                     (:pareja_id, :item_id, :tipo, :titulo, :coste, \'pendiente\',
-                     :solicitante_id, :destinatario_id, :evento_id)
-                 RETURNING id'
+                     :solicitante_id, :destinatario_id, :evento_id)'
             );
             $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
             $stmt->bindValue(':item_id', $itemId, PDO::PARAM_INT);
@@ -340,7 +351,7 @@ class Shop
 
             $stmt->execute();
 
-            $tareaId = (int) $stmt->fetchColumn();
+            $tareaId = (int) $this->db->lastInsertId();
             $this->db->commit();
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {

@@ -137,17 +137,15 @@ class Streak
             }
 
             $stmt = $this->db->prepare(
-                'INSERT INTO pareja_streaks (pareja_id)
-                 VALUES (:pareja_id)
-                 ON CONFLICT (pareja_id) DO NOTHING'
+                'INSERT IGNORE INTO pareja_streaks (pareja_id)
+                 VALUES (:pareja_id)'
             );
             $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
             $stmt->execute();
 
             $stmt = $this->db->prepare(
-                'INSERT INTO pareja_streak_checkins (pareja_id, usuario_id, fecha)
-                 VALUES (:pareja_id, :usuario_id, :fecha)
-                 ON CONFLICT DO NOTHING'
+                'INSERT IGNORE INTO pareja_streak_checkins (pareja_id, usuario_id, fecha)
+                 VALUES (:pareja_id, :usuario_id, :fecha)'
             );
             $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
             $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);

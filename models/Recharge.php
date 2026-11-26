@@ -165,8 +165,7 @@ class Recharge
     public function create(int $usuarioId, int $importe, string $fecha, ?string $motivo): int
     {
         $sql = 'INSERT INTO recargas (usuario_id, importe, fecha, motivo)
-                VALUES (:usuario_id, :importe, :fecha, :motivo)
-                RETURNING id';
+                VALUES (:usuario_id, :importe, :fecha, :motivo)';
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
@@ -181,7 +180,7 @@ class Recharge
 
         $stmt->execute();
 
-        return (int) $stmt->fetchColumn();
+        return (int) $this->db->lastInsertId();
     }
 
     /**

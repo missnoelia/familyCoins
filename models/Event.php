@@ -78,7 +78,7 @@ class Event
         }
 
         if (isset($filtros['nombre']) && $filtros['nombre'] !== '') {
-            $sql .= ' AND e.nombre ILIKE :filtro_nombre';
+            $sql .= ' AND LOWER(e.nombre) LIKE LOWER(:filtro_nombre)';
             $parametros[':filtro_nombre'] = '%' . $filtros['nombre'] . '%';
         }
 
@@ -298,8 +298,7 @@ class Event
         $sql = 'INSERT INTO eventos
                     (usuario_id, registrado_por_id, predefinido_id, nombre, fecha, coste, efecto, origen)
                 VALUES
-                    (:usuario_id, :registrado_por_id, :predefinido_id, :nombre, :fecha, :coste, :efecto, :origen)
-                RETURNING id';
+                    (:usuario_id, :registrado_por_id, :predefinido_id, :nombre, :fecha, :coste, :efecto, :origen)';
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
@@ -318,7 +317,7 @@ class Event
         $stmt->bindValue(':origen', $origen, PDO::PARAM_STR);
         $stmt->execute();
 
-        return (int) $stmt->fetchColumn();
+        return (int) $this->db->lastInsertId();
     }
 
     /**

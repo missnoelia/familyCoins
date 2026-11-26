@@ -11,8 +11,8 @@ try {
 
     $usuarios = $db->query(
         'SELECT COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE activo = TRUE) AS activos,
-                COUNT(*) FILTER (WHERE rol = \'superadmin\' AND activo = TRUE) AS superadmins_activos
+                SUM(CASE WHEN activo = TRUE THEN 1 ELSE 0 END) AS activos,
+                SUM(CASE WHEN rol = \'superadmin\' AND activo = TRUE THEN 1 ELSE 0 END) AS superadmins_activos
          FROM usuarios'
     )->fetch(PDO::FETCH_ASSOC);
 
@@ -20,10 +20,10 @@ try {
 
     $eventos = $db->query(
         'SELECT COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE anulado = FALSE) AS activos,
-                COUNT(*) FILTER (WHERE anulado = TRUE) AS anulados,
-                COALESCE(SUM(coste) FILTER (WHERE anulado = FALSE AND efecto = \'resta\'), 0) AS total_resta,
-                COALESCE(SUM(coste) FILTER (WHERE anulado = FALSE AND efecto = \'suma\'), 0) AS total_suma
+                SUM(CASE WHEN anulado = FALSE THEN 1 ELSE 0 END) AS activos,
+                SUM(CASE WHEN anulado = TRUE THEN 1 ELSE 0 END) AS anulados,
+                COALESCE(SUM(CASE WHEN anulado = FALSE AND efecto = \'resta\' THEN coste ELSE 0 END), 0) AS total_resta,
+                COALESCE(SUM(CASE WHEN anulado = FALSE AND efecto = \'suma\' THEN coste ELSE 0 END), 0) AS total_suma
          FROM eventos'
     )->fetch(PDO::FETCH_ASSOC);
 

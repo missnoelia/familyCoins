@@ -6,20 +6,18 @@ declare(strict_types=1);
 ob_start();
 
 /**
- * Pruebas de modelos contra PostgreSQL.
+ * Pruebas de modelos contra MySQL/MariaDB.
  *
  * Se ejecutan sobre una base de datos de pruebas porque vacían las tablas.
  *
- * Uso:
+ * Uso (XAMPP, root sin contraseña):
  *   set DB_NAME=familycoins_test
- *   set DB_USER=familycoins_app
- *   set DB_PASS=FamilyCoinsLocal2026
- *   php -d extension=pdo_pgsql tests/models_test.php
+ *   php tests/models_test.php
  */
 
 require_once __DIR__ . '/../config/bootstrap.php';
 
-$dbName = getenv('DB_NAME') === false ? 'couplecoins_db' : getenv('DB_NAME');
+$dbName = getenv('DB_NAME') === false ? 'familycoins_test' : getenv('DB_NAME');
 
 if (stripos($dbName, 'test') === false) {
     fwrite(STDERR, "ABORTADO: DB_NAME debe apuntar a una base de datos de pruebas.\n");
@@ -148,7 +146,7 @@ try {
     $repetidaU1 = $streakModel->registrarEntrada((int) $u1);
     comprobar('la entrada repetida no duplica', !$repetidaU1['registrada']);
     comprobarIgual('solo hay un check-in de Daria hoy', 1, (int) $db->query(
-        "SELECT COUNT(*) FROM pareja_streak_checkins WHERE usuario_id = {$u1} AND fecha = DATE '{$hoyRacha}'"
+        "SELECT COUNT(*) FROM pareja_streak_checkins WHERE usuario_id = {$u1} AND fecha = '{$hoyRacha}'"
     )->fetchColumn());
 
     $entradaU2 = $streakModel->registrarEntrada((int) $u2);
@@ -162,10 +160,10 @@ try {
     comprobarIgual('la racha no se duplica', 1, $repetidaU2['racha_actual']);
 
     // Simula que la racha venía de ayer.
-    $db->exec("DELETE FROM pareja_streak_checkins WHERE fecha = DATE '{$hoyRacha}'");
+    $db->exec("DELETE FROM pareja_streak_checkins WHERE fecha = '{$hoyRacha}'");
     $db->exec(
         "UPDATE pareja_streaks SET racha_actual = 5, racha_maxima = 5, "
-        . "ultimo_dia_completo = DATE '{$ayerRacha}' WHERE pareja_id = {$parejaId}"
+        . "ultimo_dia_completo = '{$ayerRacha}' WHERE pareja_id = {$parejaId}"
     );
 
     $streakModel->registrarEntrada((int) $u1);
@@ -175,10 +173,10 @@ try {
 
     // Simula que se saltó un día.
     $huecoRacha = (new DateTimeImmutable('now', $zonaRacha))->modify('-3 days')->format('Y-m-d');
-    $db->exec("DELETE FROM pareja_streak_checkins WHERE fecha = DATE '{$hoyRacha}'");
+    $db->exec("DELETE FROM pareja_streak_checkins WHERE fecha = '{$hoyRacha}'");
     $db->exec(
         "UPDATE pareja_streaks SET racha_actual = 8, racha_maxima = 8, "
-        . "ultimo_dia_completo = DATE '{$huecoRacha}' WHERE pareja_id = {$parejaId}"
+        . "ultimo_dia_completo = '{$huecoRacha}' WHERE pareja_id = {$parejaId}"
     );
 
     $rachaVieja = $streakModel->getEstado((int) $u1);
@@ -376,9 +374,8 @@ try {
     $haceDosDias = api_hoy()->modify('-2 days')->format('Y-m-d');
     $db->exec(
         "INSERT INTO pareja_streaks (pareja_id, racha_actual, racha_maxima, ultimo_dia_completo)
-         VALUES ({$parejaNueva}, 3, 3, DATE '{$haceDosDias}')
-         ON CONFLICT (pareja_id) DO UPDATE
-         SET racha_actual = 3, racha_maxima = 3, ultimo_dia_completo = DATE '{$haceDosDias}'"
+         VALUES ({$parejaNueva}, 3, 3, '{$haceDosDias}')
+         ON DUPLICATE KEY UPDATE racha_actual = 3, racha_maxima = 3, ultimo_dia_completo = '{$haceDosDias}'"
     );
     $db->exec(
         "UPDATE pareja_plantas
@@ -400,13 +397,13 @@ try {
 
     $haceCuatroDias = api_hoy()->modify('-4 days')->format('Y-m-d');
     $db->exec(
-        "UPDATE pareja_streaks SET ultimo_dia_completo = DATE '{$haceCuatroDias}'
+        "UPDATE pareja_streaks SET ultimo_dia_completo = '{$haceCuatroDias}'
          WHERE pareja_id = {$parejaNueva}"
     );
     $db->exec(
         "UPDATE pareja_plantas
          SET etapa = 3, etapa_maxima = 3, progreso_dias = 5,
-             degradada_para = DATE '{$haceCuatroDias}', reiniciada_para = NULL
+             degradada_para = '{$haceCuatroDias}', reiniciada_para = NULL
          WHERE pareja_id = {$parejaNueva}"
     );
     $plantModel->sincronizar($parejaNueva);
@@ -422,7 +419,7 @@ try {
     $db->exec("DELETE FROM pareja_streak_checkins WHERE pareja_id = {$parejaNueva}");
     $db->exec(
         "UPDATE pareja_streaks
-         SET racha_actual = 1, racha_maxima = 3, ultimo_dia_completo = DATE '{$ayerPlanta}'
+         SET racha_actual = 1, racha_maxima = 3, ultimo_dia_completo = '{$ayerPlanta}'
          WHERE pareja_id = {$parejaNueva}"
     );
     $streakModel->registrarEntrada((int) $u5);

@@ -1,5 +1,9 @@
+-- Esquema de FamilyCoins para MySQL/MariaDB (probado con MariaDB 10.4 de XAMPP).
+-- Crear primero una base de datos vacía con charset utf8mb4 y ejecutar este
+-- script sobre ella. Los datos de ejemplo se insertan al final.
+
 CREATE TABLE usuarios (
-    id             SERIAL PRIMARY KEY,
+    id             INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     nombre         VARCHAR(100) NOT NULL,
     email          VARCHAR(150) NOT NULL UNIQUE,
     password_hash  VARCHAR(255) NOT NULL,
@@ -8,33 +12,33 @@ CREATE TABLE usuarios (
     saldo_inicial  INTEGER,                        -- puede ser NULL
     fecha_nacimiento DATE,                         -- cumpleaños del usuario
     activo         BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at     TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE parejas (
-    id           SERIAL PRIMARY KEY,
+    id           INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     usuario_1_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id),
     usuario_2_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id),
     fecha_aniversario DATE,                        -- aniversario de la pareja
-    created_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (usuario_1_id <> usuario_2_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE pareja_streaks (
     pareja_id           INTEGER PRIMARY KEY REFERENCES parejas(id) ON DELETE CASCADE,
     racha_actual        INTEGER NOT NULL DEFAULT 0,
     racha_maxima        INTEGER NOT NULL DEFAULT 0,
     ultimo_dia_completo DATE,
-    updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE pareja_streak_checkins (
     pareja_id  INTEGER NOT NULL REFERENCES parejas(id) ON DELETE CASCADE,
     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
     fecha      DATE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (pareja_id, usuario_id, fecha)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_streak_checkins_fecha
     ON pareja_streak_checkins (pareja_id, fecha);
@@ -48,21 +52,21 @@ CREATE TABLE pareja_plantas (
     degradada_para  DATE,                          -- último día completo ya penalizado
     reiniciada_para DATE,                          -- último día completo que provocó el reset
     elegida_por_id  INTEGER NOT NULL REFERENCES usuarios(id),
-    elegida_en      TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    elegida_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE predefinidos (
-    id         SERIAL PRIMARY KEY,
+    id         INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
     nombre     VARCHAR(100) NOT NULL,
     coste      INTEGER NOT NULL,
     efecto     VARCHAR(255) NOT NULL,
     UNIQUE (usuario_id, nombre)                    -- nombre único por usuario
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE eventos (
-    id               SERIAL PRIMARY KEY,
+    id               INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     usuario_id       INTEGER NOT NULL REFERENCES usuarios(id),  -- quien recibe el efecto
     registrado_por_id INTEGER NOT NULL REFERENCES usuarios(id),
     predefinido_id   INTEGER REFERENCES predefinidos(id),       -- NULL si es evento libre
@@ -73,22 +77,22 @@ CREATE TABLE eventos (
     origen           VARCHAR(20) NOT NULL DEFAULT 'manual'
                      CHECK (origen IN ('manual', 'tienda', 'tarea', 'bono', 'planta')),
     anulado          BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at       TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE pareja_planta_cambios (
-    id             SERIAL PRIMARY KEY,
+    id             INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pareja_id      INTEGER NOT NULL REFERENCES parejas(id) ON DELETE CASCADE,
     usuario_id     INTEGER NOT NULL REFERENCES usuarios(id),
     planta_anterior VARCHAR(40),
     planta_nueva   VARCHAR(40) NOT NULL,
     coste          INTEGER NOT NULL DEFAULT 0,
     evento_id      INTEGER UNIQUE REFERENCES eventos(id),
-    created_at     TIMESTAMP NOT NULL DEFAULT NOW()
-);
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE tienda_items (
-    id            SERIAL PRIMARY KEY,
+    id            INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     clave         VARCHAR(40) UNIQUE,              -- solo para los ítems globales
     pareja_id     INTEGER REFERENCES parejas(id) ON DELETE CASCADE, -- NULL = global
     tipo          VARCHAR(20) NOT NULL
@@ -98,15 +102,15 @@ CREATE TABLE tienda_items (
     coste         INTEGER NOT NULL CHECK (coste BETWEEN 1 AND 100),
     activo        BOOLEAN NOT NULL DEFAULT TRUE,
     creado_por_id INTEGER REFERENCES usuarios(id),
-    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (pareja_id IS NOT NULL OR clave IS NOT NULL)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_tienda_items_pareja
     ON tienda_items (pareja_id, activo);
 
 CREATE TABLE pareja_tareas (
-    id                SERIAL PRIMARY KEY,
+    id                INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pareja_id         INTEGER NOT NULL REFERENCES parejas(id) ON DELETE CASCADE,
     item_id           INTEGER NOT NULL REFERENCES tienda_items(id),
     tipo              VARCHAR(20) NOT NULL
@@ -119,16 +123,16 @@ CREATE TABLE pareja_tareas (
     destinatario_id   INTEGER NOT NULL REFERENCES usuarios(id),
     resuelto_por_id   INTEGER REFERENCES usuarios(id),
     evento_id         INTEGER UNIQUE REFERENCES eventos(id),
-    created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
-    resuelto_en       TIMESTAMP,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resuelto_en       DATETIME,
     CHECK (solicitante_id <> destinatario_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE INDEX idx_pareja_tareas_pareja
     ON pareja_tareas (pareja_id, estado);
 
 CREATE TABLE pareja_bonos (
-    id          SERIAL PRIMARY KEY,
+    id          INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     pareja_id   INTEGER REFERENCES parejas(id) ON DELETE CASCADE,
     usuario_id  INTEGER NOT NULL REFERENCES usuarios(id),
     tipo        VARCHAR(20) NOT NULL
@@ -136,22 +140,22 @@ CREATE TABLE pareja_bonos (
     anio        INTEGER NOT NULL,
     importe     INTEGER NOT NULL CHECK (importe > 0),
     evento_id   INTEGER UNIQUE REFERENCES eventos(id),
-    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (usuario_id, tipo, anio)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE recargas (
-    id         SERIAL PRIMARY KEY,
+    id         INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     usuario_id INTEGER NOT NULL REFERENCES usuarios(id),
     importe    INTEGER NOT NULL,                   -- coins que se suman
     fecha      DATE NOT NULL,
     motivo     VARCHAR(255)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE configuracion (
     clave VARCHAR(50) PRIMARY KEY,
     valor VARCHAR(255) NOT NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- USUARIOS
 INSERT INTO usuarios (nombre, email, password_hash, codigo, rol, saldo_inicial, fecha_nacimiento, activo) VALUES
@@ -187,7 +191,7 @@ INSERT INTO tienda_items (clave, tipo, nombre, descripcion, coste, creado_por_id
 ('dia_sin_pantallas', 'permiso',    'Día sin pantallas',      'Un día sin pantallas para los dos',                     35, NULL),
 ('ayuda_extra',       'ganancia',   'Ayuda extra en casa',    'Gana coins por una ayuda extra aprobada por tu pareja',  25, NULL),
 ('premio_sorpresa',   'ganancia',   'Premio sorpresa',        'Tu pareja te premia con coins por un detalle',          50, NULL)
-ON CONFLICT (clave) DO NOTHING;
+ON DUPLICATE KEY UPDATE clave = clave;
 
 -- EVENTOS (predefinido_id NULL = evento libre)
 INSERT INTO eventos (usuario_id, registrado_por_id, predefinido_id, nombre, fecha, coste, efecto, anulado) VALUES

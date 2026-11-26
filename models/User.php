@@ -40,8 +40,7 @@ class User
         $sql = 'INSERT INTO usuarios
                     (nombre, email, password_hash, codigo, rol, saldo_inicial, fecha_nacimiento, activo)
                 VALUES
-                    (:nombre, :email, :password_hash, :codigo, :rol, :saldo_inicial, :fecha_nacimiento, :activo)
-                RETURNING id';
+                    (:nombre, :email, :password_hash, :codigo, :rol, :saldo_inicial, :fecha_nacimiento, :activo)';
 
         for ($intento = 0; $intento < 5; $intento++) {
             $codigo = $this->generateCode();
@@ -69,9 +68,9 @@ class User
             try {
                 $stmt->execute();
 
-                return (int) $stmt->fetchColumn();
+                return (int) $this->db->lastInsertId();
             } catch (PDOException $e) {
-                if ($e->getCode() !== '23505') {
+                if (!Database::esConflictoUnico($e)) {
                     throw $e;
                 }
 
@@ -358,7 +357,7 @@ class User
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            if ($e->getCode() === '23505') {
+            if (Database::esConflictoUnico($e)) {
                 throw new ApiException('El email ya está registrado.', 409);
             }
 

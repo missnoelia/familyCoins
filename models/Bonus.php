@@ -130,10 +130,8 @@ class Bonus
         // La fila se reserva antes de crear el evento. Si ya existía, no se
         // vuelve a entregar el bono.
         $stmt = $this->db->prepare(
-            'INSERT INTO pareja_bonos (pareja_id, usuario_id, tipo, anio, importe)
-             VALUES (:pareja_id, :usuario_id, :tipo, :anio, :importe)
-             ON CONFLICT (usuario_id, tipo, anio) DO NOTHING
-             RETURNING id'
+            'INSERT IGNORE INTO pareja_bonos (pareja_id, usuario_id, tipo, anio, importe)
+             VALUES (:pareja_id, :usuario_id, :tipo, :anio, :importe)'
         );
         $stmt->bindValue(':pareja_id', $pareja['id'], PDO::PARAM_INT);
         $stmt->bindValue(':usuario_id', $beneficiarioId, PDO::PARAM_INT);
@@ -142,13 +140,11 @@ class Bonus
         $stmt->bindValue(':importe', $importe, PDO::PARAM_INT);
         $stmt->execute();
 
-        $bonoId = $stmt->fetchColumn();
-
-        if ($bonoId === false) {
+        if ($stmt->rowCount() === 0) {
             return null;
         }
 
-        $bonoId = (int) $bonoId;
+        $bonoId = (int) $this->db->lastInsertId();
         $titularId = $pareja['usuario_1_id'] === $beneficiarioId
             ? $pareja['usuario_2_id']
             : $pareja['usuario_1_id'];
