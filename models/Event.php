@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 class Event
 {
+    public const ORIGENES = ['manual', 'tienda', 'tarea', 'bono', 'planta'];
+
     private PDO $db;
 
     public function __construct(PDO $db)
@@ -76,7 +78,7 @@ class Event
         }
 
         if (isset($filtros['nombre']) && $filtros['nombre'] !== '') {
-            $sql .= ' AND e.nombre ILIKE :filtro_nombre';
+            $sql .= ' AND LOWER(e.nombre) LIKE LOWER(:filtro_nombre)';
             $parametros[':filtro_nombre'] = '%' . $filtros['nombre'] . '%';
         }
 
@@ -116,6 +118,105 @@ class Event
         $eventos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         return array_map(static fn (array $evento): array => self::normalizarEvento($evento), $eventos);
+    }
+
+    /**
+     * Listado global de eventos para el panel de administración.
+     *
+     * @param array<string, mixed> $filtros
+     * @return array{data: array<int, array<string, mixed>>, total: int}
+     */
+    public function adminList(array $filtros = []): array
+    {
+        $where = [];
+        $parametros = [];
+
+        if (isset($filtros['usuario_id'])) {
+            $where[] = 'e.usuario_id = :usuario_id';
+            $parametros[':usuario_id'] = (int) $filtros['usuario_id'];
+        }
+
+        if (isset($filtros['pareja_id'])) {
+            $where[] = 'e.usuario_id IN (
+                            SELECT usuario_1_id FROM parejas WHERE id = :pareja1
+                            UNION
+                            SELECT usuario_2_id FROM parejas WHERE id = :pareja2
+                        )';
+            $parametros[':pareja1'] = (int) $filtros['pareja_id'];
+            $parametros[':pareja2'] = (int) $filtros['pareja_id'];
+        }
+
+        if (!empty($filtros['q'])) {
+            $where[] = 'LOWER(e.nombre) LIKE :q';
+            $parametros[':q'] = '%' . strtolower(trim((string) $filtros['q'])) . '%';
+        }
+
+        if (!empty($filtros['efecto'])) {
+            $where[] = 'e.efecto = :efecto';
+            $parametros[':efecto'] = (string) $filtros['efecto'];
+        }
+
+        if (isset($filtros['desde'])) {
+            $where[] = 'e.fecha >= :desde';
+            $parametros[':desde'] = (string) $filtros['desde'];
+        }
+
+        if (isset($filtros['hasta'])) {
+            $where[] = 'e.fecha <= :hasta';
+            $parametros[':hasta'] = (string) $filtros['hasta'];
+        }
+
+        if (array_key_exists('anulado', $filtros) && is_bool($filtros['anulado'])) {
+            $where[] = 'e.anulado = ' . ($filtros['anulado'] ? 'TRUE' : 'FALSE');
+        }
+
+        $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
+
+        $sql = 'SELECT e.*,
+                       u.nombre AS usuario_nombre,
+                       r.nombre AS registrado_por_nombre
+                FROM eventos e
+                INNER JOIN usuarios u ON u.id = e.usuario_id
+                INNER JOIN usuarios r ON r.id = e.registrado_por_id'
+                . $whereSql
+                . ' ORDER BY e.fecha DESC, e.id DESC
+                    LIMIT :limite OFFSET :offset';
+
+        $stmt = $this->db->prepare($sql);
+
+        foreach ($parametros as $nombre => $valor) {
+            $stmt->bindValue(
+                $nombre,
+                $valor,
+                is_int($valor) ? PDO::PARAM_INT : PDO::PARAM_STR
+            );
+        }
+
+        $stmt->bindValue(':limite', (int) $filtros['limite'], PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int) $filtros['offset'], PDO::PARAM_INT);
+        $stmt->execute();
+
+        $eventos = array_map(
+            static fn (array $evento): array => self::normalizarEvento($evento),
+            $stmt->fetchAll(PDO::FETCH_ASSOC)
+        );
+
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM eventos e' . $whereSql);
+
+        foreach ($parametros as $nombre => $valor) {
+            $stmt->bindValue(
+                $nombre,
+                $valor,
+                is_int($valor) ? PDO::PARAM_INT : PDO::PARAM_STR
+            );
+        }
+
+        $stmt->execute();
+
+        return [
+            'data' => $eventos,
+            'total' => (int) $stmt->fetchColumn(),
+        ];
     }
 
     /**
@@ -161,7 +262,20 @@ class Event
             $evento['anulado'] = self::esAnulado($evento['anulado']);
         }
 
+        if (array_key_exists('origen', $evento)) {
+            $evento['origen'] = (string) $evento['origen'];
+        }
+
         return $evento;
+    }
+
+    /**
+     * Indica si un evento lo generó el sistema (tienda, tarea, bono o planta)
+     * y, por tanto, no debe editarse ni anularse desde el historial manual.
+     */
+    public static function esSistema(mixed $origen): bool
+    {
+        return is_string($origen) && $origen !== '' && $origen !== 'manual';
     }
 
     /**
@@ -174,13 +288,17 @@ class Event
         string $nombre,
         string $fecha,
         int $coste,
-        string $efecto
+        string $efecto,
+        string $origen = 'manual'
     ): int {
+        if (!in_array($origen, self::ORIGENES, true)) {
+            throw new ApiException('El origen del evento no es válido.', 400);
+        }
+
         $sql = 'INSERT INTO eventos
-                    (usuario_id, registrado_por_id, predefinido_id, nombre, fecha, coste, efecto)
+                    (usuario_id, registrado_por_id, predefinido_id, nombre, fecha, coste, efecto, origen)
                 VALUES
-                    (:usuario_id, :registrado_por_id, :predefinido_id, :nombre, :fecha, :coste, :efecto)
-                RETURNING id';
+                    (:usuario_id, :registrado_por_id, :predefinido_id, :nombre, :fecha, :coste, :efecto, :origen)';
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
@@ -196,9 +314,10 @@ class Event
         $stmt->bindValue(':fecha', $fecha, PDO::PARAM_STR);
         $stmt->bindValue(':coste', $coste, PDO::PARAM_INT);
         $stmt->bindValue(':efecto', $efecto, PDO::PARAM_STR);
+        $stmt->bindValue(':origen', $origen, PDO::PARAM_STR);
         $stmt->execute();
 
-        return (int) $stmt->fetchColumn();
+        return (int) $this->db->lastInsertId();
     }
 
     /**

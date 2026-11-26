@@ -31,6 +31,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store');
 
 /**
  * Error controlado que se puede lanzar desde cualquier modelo o endpoint.
@@ -76,12 +77,61 @@ function api_error(int $codigo, string $mensaje): void
 }
 
 /**
+ * Comprueba que las peticiones POST de un navegador vengan del mismo origen.
+ *
+ * Es una defensa adicional contra CSRF. Los clientes que no envían cabecera
+ * Origin (curl, pruebas, algunas integraciones) siguen permitidos.
+ */
+function api_exigir_origen(): void
+{
+    if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        return;
+    }
+
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+    if ($origin === '') {
+        return;
+    }
+
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+
+    if ($host === '') {
+        api_error(403, 'Origen no permitido.');
+    }
+
+    $partesHost = parse_url('http://' . $host);
+    $partesOrigen = parse_url($origin);
+
+    if (!is_array($partesHost) || !is_array($partesOrigen)) {
+        api_error(403, 'Origen no permitido.');
+    }
+
+    $hostEsperado = strtolower((string) ($partesHost['host'] ?? ''));
+    $hostOrigen = strtolower((string) ($partesOrigen['host'] ?? ''));
+
+    if ($hostEsperado === '' || $hostOrigen === '' || $hostEsperado !== $hostOrigen) {
+        api_error(403, 'Origen no permitido.');
+    }
+
+    $esHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    $puertoEsperado = $partesHost['port'] ?? ($esHttps ? 443 : 80);
+    $puertoOrigen = $partesOrigen['port'] ?? ($esHttps ? 443 : 80);
+
+    if ((int) $puertoEsperado !== (int) $puertoOrigen) {
+        api_error(403, 'Origen no permitido.');
+    }
+}
+
+/**
  * Comprueba el método HTTP del endpoint actual.
  *
  * @param array<int, string> $permitidos
  */
 function api_metodo(array $permitidos): void
 {
+    api_exigir_origen();
+
     $permitidos = array_map('strtoupper', $permitidos);
     $metodo = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
@@ -216,6 +266,22 @@ function api_exigir_pareja(): array
 }
 
 /**
+ * Exige sesión y rol de superadministrador.
+ *
+ * @return array<string, mixed>
+ */
+function api_exigir_admin(): array
+{
+    $usuario = api_usuario_actual();
+
+    if (strtolower((string) ($usuario['rol'] ?? '')) !== 'superadmin') {
+        api_error(403, 'Necesitas permisos de superadministrador.');
+    }
+
+    return $usuario;
+}
+
+/**
  * Normaliza un texto recibido por la API.
  *
  * Si se indica $maximo, se valida que no supere esa longitud.
@@ -251,6 +317,153 @@ function api_entero_positivo(mixed $valor): ?int
     }
 
     return null;
+}
+
+/**
+ * Valida un número entero mayor o igual que cero.
+ *
+ * Se usa para importes y saldos, que sí admiten el valor 0.
+ */
+function api_entero_no_negativo(mixed $valor): ?int
+{
+    if ($valor === null || $valor === '') {
+        return null;
+    }
+
+    $maximoPostgres = 2147483647;
+
+    if (is_int($valor)) {
+        return ($valor >= 0 && $valor <= $maximoPostgres) ? $valor : null;
+    }
+
+    if (is_string($valor) && preg_match('/^[0-9]+$/', trim($valor)) === 1) {
+        $numero = (int) trim($valor);
+
+        return ($numero >= 0 && $numero <= $maximoPostgres) ? $numero : null;
+    }
+
+    return null;
+}
+
+/**
+ * Valida el rol de un usuario.
+ */
+function api_rol(mixed $valor, string $defecto = 'usuario'): string
+{
+    $rol = is_scalar($valor) ? strtolower(trim((string) $valor)) : '';
+
+    if ($rol === '') {
+        return $defecto;
+    }
+
+    if (!in_array($rol, ['usuario', 'superadmin'], true)) {
+        api_error(400, 'El rol debe ser "usuario" o "superadmin".');
+    }
+
+    return $rol;
+}
+
+/**
+ * Valida una contraseña.
+ *
+ * La política se mantiene igual que en el registro (mínimo 4 caracteres y una
+ * mayúscula) y se añade el límite de 72 bytes que impone bcrypt.
+ */
+function api_password(mixed $valor, string $nombreCampo = 'contraseña'): string
+{
+    if (!is_string($valor)) {
+        api_error(400, 'La ' . $nombreCampo . ' no es válida.');
+    }
+
+    $password = (string) $valor;
+
+    if (mb_strlen($password) < 4) {
+        api_error(400, 'La ' . $nombreCampo . ' debe tener al menos 4 caracteres.');
+    }
+
+    if (strlen($password) > 72) {
+        api_error(400, 'La ' . $nombreCampo . ' no puede superar los 72 bytes.');
+    }
+
+    if (preg_match('/[A-Z]/', $password) !== 1) {
+        api_error(400, 'La ' . $nombreCampo . ' debe incluir al menos una mayúscula.');
+    }
+
+    return $password;
+}
+
+/**
+ * Lee y valida los parámetros de paginación.
+ *
+ * @return array{limite: int, offset: int, pagina: int}
+ */
+function api_paginacion(int $porDefecto = 50, int $maximo = 200): array
+{
+    $pagina = api_entero_positivo($_GET['pagina'] ?? null) ?? 1;
+    $limite = api_entero_positivo($_GET['limite'] ?? null) ?? $porDefecto;
+
+    if ($limite > $maximo) {
+        api_error(400, 'El límite no puede ser mayor que ' . $maximo . '.');
+    }
+
+    return [
+        'limite' => $limite,
+        'offset' => ($pagina - 1) * $limite,
+        'pagina' => $pagina,
+    ];
+}
+
+/**
+ * Construye la respuesta paginada estándar.
+ *
+ * @param array<int, mixed> $datos
+ * @param array{limite: int, offset: int, pagina: int} $paginacion
+ * @return array<string, mixed>
+ */
+function api_paginado(array $datos, int $total, array $paginacion): array
+{
+    return [
+        'success' => true,
+        'data' => $datos,
+        'total' => $total,
+        'pagina' => $paginacion['pagina'],
+        'limite' => $paginacion['limite'],
+        'paginas' => $total === 0 ? 0 : (int) ceil($total / $paginacion['limite']),
+    ];
+}
+
+/**
+ * Zona horaria compartida por rachas, plantas y bonos.
+ */
+function api_zona_horaria(): DateTimeZone
+{
+    static $zona = null;
+
+    if ($zona instanceof DateTimeZone) {
+        return $zona;
+    }
+
+    $nombreZona = getenv('STREAK_TIMEZONE');
+
+    if ($nombreZona === false || trim($nombreZona) === '') {
+        $nombreZona = 'Europe/Madrid';
+    }
+
+    try {
+        $zona = new DateTimeZone($nombreZona);
+    } catch (Throwable $e) {
+        $zona = new DateTimeZone('Europe/Madrid');
+    }
+
+    return $zona;
+}
+
+/**
+ * Fecha de hoy en la zona horaria de la aplicación.
+ */
+function api_hoy(): DateTimeImmutable
+{
+    return new DateTimeImmutable('now', api_zona_horaria());
 }
 
 /**
@@ -319,6 +532,12 @@ require_once __DIR__ . '/../models/Couple.php';
 require_once __DIR__ . '/../models/Predefined.php';
 require_once __DIR__ . '/../models/Event.php';
 require_once __DIR__ . '/../models/Recharge.php';
+require_once __DIR__ . '/../models/Balance.php';
+require_once __DIR__ . '/../models/Stats.php';
+require_once __DIR__ . '/../models/Streak.php';
+require_once __DIR__ . '/../models/Plant.php';
+require_once __DIR__ . '/../models/Shop.php';
+require_once __DIR__ . '/../models/Bonus.php';
 
 set_exception_handler(static function (Throwable $e): void {
     if ($e instanceof ApiException) {

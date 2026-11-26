@@ -15,9 +15,19 @@ class User
      *
      * Devuelve false si el email ya está registrado. Si el código generado
      * colisiona con otro usuario, se reintenta la operación.
+     *
+     * Los parámetros opcionales permiten crear cuentas desde el panel de
+     * administración sin duplicar la lógica de generación de código.
      */
-    public function register(string $nombre, string $email, string $password): int|false
-    {
+    public function register(
+        string $nombre,
+        string $email,
+        string $password,
+        string $rol = 'usuario',
+        ?int $saldoInicial = null,
+        bool $activo = true,
+        ?string $fechaNacimiento = null
+    ): int|false {
         $nombre = trim($nombre);
         $email = strtolower(trim($email));
 
@@ -27,9 +37,10 @@ class User
 
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-        $sql = 'INSERT INTO usuarios (nombre, email, password_hash, codigo, rol)
-                VALUES (:nombre, :email, :password_hash, :codigo, :rol)
-                RETURNING id';
+        $sql = 'INSERT INTO usuarios
+                    (nombre, email, password_hash, codigo, rol, saldo_inicial, fecha_nacimiento, activo)
+                VALUES
+                    (:nombre, :email, :password_hash, :codigo, :rol, :saldo_inicial, :fecha_nacimiento, :activo)';
 
         for ($intento = 0; $intento < 5; $intento++) {
             $codigo = $this->generateCode();
@@ -38,14 +49,28 @@ class User
             $stmt->bindValue(':email', $email, PDO::PARAM_STR);
             $stmt->bindValue(':password_hash', $passwordHash, PDO::PARAM_STR);
             $stmt->bindValue(':codigo', $codigo, PDO::PARAM_STR);
-            $stmt->bindValue(':rol', 'usuario', PDO::PARAM_STR);
+            $stmt->bindValue(':rol', $rol, PDO::PARAM_STR);
+
+            if ($saldoInicial === null) {
+                $stmt->bindValue(':saldo_inicial', null, PDO::PARAM_NULL);
+            } else {
+                $stmt->bindValue(':saldo_inicial', $saldoInicial, PDO::PARAM_INT);
+            }
+
+            if ($fechaNacimiento === null) {
+                $stmt->bindValue(':fecha_nacimiento', null, PDO::PARAM_NULL);
+            } else {
+                $stmt->bindValue(':fecha_nacimiento', $fechaNacimiento, PDO::PARAM_STR);
+            }
+
+            $stmt->bindValue(':activo', $activo, PDO::PARAM_BOOL);
 
             try {
                 $stmt->execute();
 
-                return (int) $stmt->fetchColumn();
+                return (int) $this->db->lastInsertId();
             } catch (PDOException $e) {
-                if ($e->getCode() !== '23505') {
+                if (!Database::esConflictoUnico($e)) {
                     throw $e;
                 }
 
@@ -140,7 +165,7 @@ class User
 
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $user ?: null;
+        return $user ? self::normalizarUsuario($user) : null;
     }
 
     /**
@@ -148,7 +173,7 @@ class User
      */
     public function getById(int $id): ?array
     {
-        $sql = 'SELECT id, nombre, email, codigo, rol, saldo_inicial, activo, created_at
+        $sql = 'SELECT id, nombre, email, codigo, rol, saldo_inicial, fecha_nacimiento, activo, created_at
                 FROM usuarios
                 WHERE id = :id
                 LIMIT 1';
@@ -159,7 +184,7 @@ class User
 
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $user ?: null;
+        return $user ? self::normalizarUsuario($user) : null;
     }
 
     /**
@@ -178,7 +203,254 @@ class User
 
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $user ?: null;
+        return $user ? self::normalizarUsuario($user) : null;
+    }
+
+    /**
+     * Listado de usuarios para el panel de administración.
+     *
+     * @param array<string, mixed> $filtros
+     * @return array{data: array<int, array<string, mixed>>, total: int}
+     */
+    public function adminList(array $filtros = []): array
+    {
+        $where = [];
+        $parametros = [];
+
+        if (!empty($filtros['q'])) {
+            $where[] = '(LOWER(u.nombre) LIKE :q1 OR LOWER(u.email) LIKE :q2 OR LOWER(u.codigo) LIKE :q3)';
+            $busqueda = '%' . strtolower(trim((string) $filtros['q'])) . '%';
+            $parametros[':q1'] = $busqueda;
+            $parametros[':q2'] = $busqueda;
+            $parametros[':q3'] = $busqueda;
+        }
+
+        if (!empty($filtros['rol'])) {
+            $where[] = 'u.rol = :rol';
+            $parametros[':rol'] = (string) $filtros['rol'];
+        }
+
+        if (array_key_exists('activo', $filtros) && is_bool($filtros['activo'])) {
+            $where[] = 'u.activo = ' . ($filtros['activo'] ? 'TRUE' : 'FALSE');
+        }
+
+        if (array_key_exists('con_pareja', $filtros)) {
+            $where[] = ($filtros['con_pareja'] ? 'EXISTS' : 'NOT EXISTS')
+                . ' (SELECT 1 FROM parejas p WHERE p.usuario_1_id = u.id OR p.usuario_2_id = u.id)';
+        }
+
+        $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
+
+        $sql = 'SELECT u.id, u.nombre, u.email, u.codigo, u.rol, u.saldo_inicial, u.fecha_nacimiento,
+                       u.activo, u.created_at,
+                       (SELECT p.id
+                        FROM parejas p
+                        WHERE p.usuario_1_id = u.id OR p.usuario_2_id = u.id
+                        LIMIT 1) AS pareja_id,
+                       (SELECT pu.id
+                        FROM parejas p
+                        INNER JOIN usuarios pu
+                            ON pu.id = CASE
+                                WHEN p.usuario_1_id = u.id THEN p.usuario_2_id
+                                ELSE p.usuario_1_id
+                            END
+                        WHERE p.usuario_1_id = u.id OR p.usuario_2_id = u.id
+                        LIMIT 1) AS pareja_usuario_id,
+                       (SELECT pu.nombre
+                        FROM parejas p
+                        INNER JOIN usuarios pu
+                            ON pu.id = CASE
+                                WHEN p.usuario_1_id = u.id THEN p.usuario_2_id
+                                ELSE p.usuario_1_id
+                            END
+                        WHERE p.usuario_1_id = u.id OR p.usuario_2_id = u.id
+                        LIMIT 1) AS pareja_nombre
+                FROM usuarios u'
+                . $whereSql
+                . ' ORDER BY u.id ASC
+                    LIMIT :limite OFFSET :offset';
+
+        $stmt = $this->db->prepare($sql);
+
+        foreach ($parametros as $nombre => $valor) {
+            $stmt->bindValue($nombre, $valor, PDO::PARAM_STR);
+        }
+
+        $stmt->bindValue(':limite', (int) $filtros['limite'], PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int) $filtros['offset'], PDO::PARAM_INT);
+        $stmt->execute();
+
+        $usuarios = array_map(
+            static fn (array $usuario): array => self::normalizarUsuario($usuario),
+            $stmt->fetchAll(PDO::FETCH_ASSOC)
+        );
+
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM usuarios u' . $whereSql);
+
+        foreach ($parametros as $nombre => $valor) {
+            $stmt->bindValue($nombre, $valor, PDO::PARAM_STR);
+        }
+
+        $stmt->execute();
+
+        return [
+            'data' => $usuarios,
+            'total' => (int) $stmt->fetchColumn(),
+        ];
+    }
+
+    /**
+     * Actualiza un usuario desde el panel de administración.
+     */
+    public function adminUpdate(
+        int $id,
+        string $nombre,
+        string $email,
+        string $rol,
+        ?int $saldoInicial,
+        bool $activo,
+        ?string $password = null,
+        ?string $fechaNacimiento = null
+    ): bool {
+        $campos = [
+            'nombre = :nombre',
+            'email = :email',
+            'rol = :rol',
+            'saldo_inicial = :saldo_inicial',
+            'fecha_nacimiento = :fecha_nacimiento',
+            'activo = :activo',
+        ];
+
+        $sql = 'UPDATE usuarios SET ' . implode(', ', $campos);
+
+        if ($password !== null) {
+            $sql .= ', password_hash = :password_hash';
+        }
+
+        $sql .= ' WHERE id = :id';
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->bindValue(':nombre', trim($nombre), PDO::PARAM_STR);
+        $stmt->bindValue(':email', strtolower(trim($email)), PDO::PARAM_STR);
+        $stmt->bindValue(':rol', $rol, PDO::PARAM_STR);
+
+        if ($saldoInicial === null) {
+            $stmt->bindValue(':saldo_inicial', null, PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':saldo_inicial', $saldoInicial, PDO::PARAM_INT);
+        }
+
+        if ($fechaNacimiento === null) {
+            $stmt->bindValue(':fecha_nacimiento', null, PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':fecha_nacimiento', $fechaNacimiento, PDO::PARAM_STR);
+        }
+
+        $stmt->bindValue(':activo', $activo, PDO::PARAM_BOOL);
+
+        if ($password !== null) {
+            $stmt->bindValue(':password_hash', password_hash($password, PASSWORD_DEFAULT), PDO::PARAM_STR);
+        }
+
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+
+        try {
+            $stmt->execute();
+        } catch (PDOException $e) {
+            if (Database::esConflictoUnico($e)) {
+                throw new ApiException('El email ya está registrado.', 409);
+            }
+
+            throw $e;
+        }
+
+        return $this->getById($id) !== null;
+    }
+
+    /**
+     * Da de baja lógica a un usuario.
+     */
+    public function adminDeactivate(int $id): bool
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE usuarios
+             SET activo = FALSE
+             WHERE id = :id AND activo = TRUE'
+        );
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Cuenta los superadministradores activos.
+     */
+    public function contarSuperadminsActivos(): int
+    {
+        $stmt = $this->db->query(
+            "SELECT COUNT(*) FROM usuarios WHERE rol = 'superadmin' AND activo = TRUE"
+        );
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Devuelve el hash de la contraseña de un usuario.
+     */
+    public function getPasswordHash(int $id): ?string
+    {
+        $stmt = $this->db->prepare('SELECT password_hash FROM usuarios WHERE id = :id LIMIT 1');
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $hash = $stmt->fetchColumn();
+
+        return $hash === false ? null : (string) $hash;
+    }
+
+    /**
+     * Cambia la contraseña del propio usuario.
+     */
+    public function changePassword(int $id, string $passwordActual, string $passwordNueva): bool
+    {
+        $hash = $this->getPasswordHash($id);
+
+        if ($hash === null || !password_verify($passwordActual, $hash)) {
+            return false;
+        }
+
+        $stmt = $this->db->prepare('UPDATE usuarios SET password_hash = :hash WHERE id = :id');
+        $stmt->bindValue(':hash', password_hash($passwordNueva, PASSWORD_DEFAULT), PDO::PARAM_STR);
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+
+        return true;
+    }
+
+    /**
+     * Actualiza la fecha de nacimiento del propio usuario.
+     */
+    public function updateBirthday(int $id, ?string $fecha): bool
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE usuarios SET fecha_nacimiento = :fecha WHERE id = :id'
+        );
+
+        if ($fecha === null) {
+            $stmt->bindValue(':fecha', null, PDO::PARAM_NULL);
+        } else {
+            $stmt->bindValue(':fecha', $fecha, PDO::PARAM_STR);
+        }
+
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0 || $this->getById($id) !== null;
     }
 
     /**
@@ -222,5 +494,32 @@ class User
             || $valor === '1'
             || $valor === 't'
             || $valor === 'true';
+    }
+
+    /**
+     * Normaliza los tipos de un usuario devuelto por la base de datos.
+     *
+     * @param array<string, mixed> $usuario
+     * @return array<string, mixed>
+     */
+    public static function normalizarUsuario(array $usuario): array
+    {
+        foreach (['id', 'pareja_id', 'pareja_usuario_id'] as $campo) {
+            if (array_key_exists($campo, $usuario)) {
+                $usuario[$campo] = $usuario[$campo] === null ? null : (int) $usuario[$campo];
+            }
+        }
+
+        if (array_key_exists('saldo_inicial', $usuario)) {
+            $usuario['saldo_inicial'] = $usuario['saldo_inicial'] === null
+                ? null
+                : (int) $usuario['saldo_inicial'];
+        }
+
+        if (array_key_exists('activo', $usuario)) {
+            $usuario['activo'] = self::esActivo($usuario['activo']);
+        }
+
+        return $usuario;
     }
 }

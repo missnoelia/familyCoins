@@ -9,9 +9,18 @@ $datos = api_datos();
 
 $nombre = api_texto($datos['nombre'] ?? '', 100);
 $email = strtolower(api_texto($datos['email'] ?? '', 150));
-$password = is_string($datos['password'] ?? null) ? $datos['password'] : '';
+$password = api_password($datos['password'] ?? null);
+$fechaNacimiento = null;
 
-if ($nombre === '' || $email === '' || $password === '') {
+if (isset($datos['fecha_nacimiento']) && $datos['fecha_nacimiento'] !== '' && $datos['fecha_nacimiento'] !== null) {
+    $fechaNacimiento = api_fecha(api_texto($datos['fecha_nacimiento'], 10));
+
+    if ($fechaNacimiento === null) {
+        api_error(400, 'La fecha de nacimiento no es válida.');
+    }
+}
+
+if ($nombre === '' || $email === '') {
     api_error(400, 'Todos los campos son obligatorios.');
 }
 
@@ -19,15 +28,11 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     api_error(400, 'El email no es válido.');
 }
 
-if (strlen($password) < 4 || !preg_match('/[A-Z]/', $password)) {
-    api_error(400, 'La contraseña debe tener al menos 4 caracteres y una mayúscula.');
-}
-
 try {
     $db = api_db();
     $userModel = new User($db);
 
-    $id = $userModel->register($nombre, $email, $password);
+    $id = $userModel->register($nombre, $email, $password, 'usuario', null, true, $fechaNacimiento);
 
     if ($id === false) {
         api_error(409, 'El email ya está registrado.');
@@ -43,6 +48,7 @@ try {
             'nombre' => $usuario['nombre'] ?? $nombre,
             'email' => $usuario['email'] ?? $email,
             'codigo' => $usuario['codigo'] ?? null,
+            'fecha_nacimiento' => $usuario['fecha_nacimiento'] ?? null,
         ],
     ]);
 } catch (PDOException $e) {

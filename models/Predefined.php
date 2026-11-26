@@ -80,8 +80,7 @@ class Predefined
     public function create(int $usuarioId, string $nombre, int $coste, string $efecto): int
     {
         $sql = 'INSERT INTO predefinidos (usuario_id, nombre, coste, efecto)
-                VALUES (:usuario_id, :nombre, :coste, :efecto)
-                RETURNING id';
+                VALUES (:usuario_id, :nombre, :coste, :efecto)';
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
@@ -92,14 +91,14 @@ class Predefined
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            if ($e->getCode() === '23505') {
+            if (Database::esConflictoUnico($e)) {
                 throw new ApiException('Ya existe un predefinido con ese nombre.', 409);
             }
 
             throw $e;
         }
 
-        return (int) $stmt->fetchColumn();
+        return (int) $this->db->lastInsertId();
     }
 
     /**
@@ -121,7 +120,7 @@ class Predefined
         try {
             $stmt->execute();
         } catch (PDOException $e) {
-            if ($e->getCode() === '23505') {
+            if (Database::esConflictoUnico($e)) {
                 throw new ApiException('Ya existe un predefinido con ese nombre.', 409);
             }
 

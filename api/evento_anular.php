@@ -28,6 +28,10 @@ try {
         api_error(409, 'El evento ya está anulado.');
     }
 
+    if (Event::esSistema($evento['origen'] ?? 'manual')) {
+        api_error(409, 'Los eventos generados por la tienda, las tareas, los bonos o la planta no se pueden anular.');
+    }
+
     if (!$eventoModel->anular($id)) {
         api_error(409, 'No se ha podido anular el evento.');
     }

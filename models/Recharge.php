@@ -67,13 +67,105 @@ class Recharge
     }
 
     /**
+     * Listado global de recargas para el panel de administración.
+     *
+     * @param array<string, mixed> $filtros
+     * @return array{data: array<int, array<string, mixed>>, total: int}
+     */
+    public function adminList(array $filtros = []): array
+    {
+        $where = [];
+        $parametros = [];
+
+        if (isset($filtros['usuario_id'])) {
+            $where[] = 'r.usuario_id = :usuario_id';
+            $parametros[':usuario_id'] = (int) $filtros['usuario_id'];
+        }
+
+        if (isset($filtros['pareja_id'])) {
+            $where[] = 'r.usuario_id IN (
+                            SELECT usuario_1_id FROM parejas WHERE id = :pareja1
+                            UNION
+                            SELECT usuario_2_id FROM parejas WHERE id = :pareja2
+                        )';
+            $parametros[':pareja1'] = (int) $filtros['pareja_id'];
+            $parametros[':pareja2'] = (int) $filtros['pareja_id'];
+        }
+
+        if (!empty($filtros['q'])) {
+            $where[] = 'LOWER(COALESCE(r.motivo, \'\')) LIKE :q';
+            $parametros[':q'] = '%' . strtolower(trim((string) $filtros['q'])) . '%';
+        }
+
+        if (isset($filtros['desde'])) {
+            $where[] = 'r.fecha >= :desde';
+            $parametros[':desde'] = (string) $filtros['desde'];
+        }
+
+        if (isset($filtros['hasta'])) {
+            $where[] = 'r.fecha <= :hasta';
+            $parametros[':hasta'] = (string) $filtros['hasta'];
+        }
+
+        $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
+
+        $sql = 'SELECT r.*, u.nombre AS usuario_nombre
+                FROM recargas r
+                INNER JOIN usuarios u ON u.id = r.usuario_id'
+                . $whereSql
+                . ' ORDER BY r.fecha DESC, r.id DESC
+                    LIMIT :limite OFFSET :offset';
+
+        $stmt = $this->db->prepare($sql);
+
+        foreach ($parametros as $nombre => $valor) {
+            $stmt->bindValue(
+                $nombre,
+                $valor,
+                is_int($valor) ? PDO::PARAM_INT : PDO::PARAM_STR
+            );
+        }
+
+        $stmt->bindValue(':limite', (int) $filtros['limite'], PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int) $filtros['offset'], PDO::PARAM_INT);
+        $stmt->execute();
+
+        $recargas = array_map(
+            static function (array $recarga): array {
+                $recarga['id'] = (int) $recarga['id'];
+                $recarga['usuario_id'] = (int) $recarga['usuario_id'];
+                $recarga['importe'] = (int) $recarga['importe'];
+
+                return $recarga;
+            },
+            $stmt->fetchAll(PDO::FETCH_ASSOC)
+        );
+
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM recargas r' . $whereSql);
+
+        foreach ($parametros as $nombre => $valor) {
+            $stmt->bindValue(
+                $nombre,
+                $valor,
+                is_int($valor) ? PDO::PARAM_INT : PDO::PARAM_STR
+            );
+        }
+
+        $stmt->execute();
+
+        return [
+            'data' => $recargas,
+            'total' => (int) $stmt->fetchColumn(),
+        ];
+    }
+
+    /**
      * Crea una recarga para un miembro de la pareja.
      */
     public function create(int $usuarioId, int $importe, string $fecha, ?string $motivo): int
     {
         $sql = 'INSERT INTO recargas (usuario_id, importe, fecha, motivo)
-                VALUES (:usuario_id, :importe, :fecha, :motivo)
-                RETURNING id';
+                VALUES (:usuario_id, :importe, :fecha, :motivo)';
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
@@ -88,7 +180,7 @@ class Recharge
 
         $stmt->execute();
 
-        return (int) $stmt->fetchColumn();
+        return (int) $this->db->lastInsertId();
     }
 
     /**
