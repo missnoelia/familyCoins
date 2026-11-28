@@ -44,7 +44,8 @@ CREATE INDEX idx_streak_checkins_fecha
     ON pareja_streak_checkins (pareja_id, fecha);
 
 CREATE TABLE pareja_plantas (
-    pareja_id       INTEGER PRIMARY KEY REFERENCES parejas(id) ON DELETE CASCADE,
+    pareja_id       INTEGER NOT NULL REFERENCES parejas(id) ON DELETE CASCADE,
+    usuario_id      INTEGER NOT NULL REFERENCES usuarios(id),
     planta_id       VARCHAR(40) NOT NULL,
     etapa           INTEGER NOT NULL DEFAULT 0 CHECK (etapa BETWEEN 0 AND 4),
     etapa_maxima    INTEGER NOT NULL DEFAULT 0 CHECK (etapa_maxima BETWEEN 0 AND 4),
@@ -53,7 +54,8 @@ CREATE TABLE pareja_plantas (
     reiniciada_para DATE,                          -- último día completo que provocó el reset
     elegida_por_id  INTEGER NOT NULL REFERENCES usuarios(id),
     elegida_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (pareja_id, usuario_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE predefinidos (
@@ -143,6 +145,19 @@ CREATE TABLE pareja_bonos (
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (usuario_id, tipo, anio)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE pareja_recuerdos (
+    id            INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    pareja_id     INTEGER NOT NULL REFERENCES parejas(id) ON DELETE CASCADE,
+    creado_por_id INTEGER NOT NULL REFERENCES usuarios(id),
+    titulo        VARCHAR(100) NOT NULL,
+    fecha         DATE NOT NULL,
+    nota          VARCHAR(255) NOT NULL,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_pareja_recuerdos_fecha
+    ON pareja_recuerdos (pareja_id, fecha);
 
 CREATE TABLE recargas (
     id         INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

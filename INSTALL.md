@@ -117,14 +117,14 @@ Las pruebas **vacían las tablas**, así que solo deben apuntar a
 `familycoins_test`. Los scripts abortan si el nombre de la base de datos no
 contiene `test`.
 
-### Pruebas de modelos (131)
+### Pruebas de modelos (160)
 
 ```powershell
 $env:DB_NAME = "familycoins_test"
 C:\xampp\php\php.exe tests\models_test.php
 ```
 
-### Pruebas HTTP (143)
+### Pruebas HTTP (175)
 
 Primero arranca el servidor integrado de PHP (o usa Apache) y después:
 
@@ -140,8 +140,8 @@ Con Apache, cambia `TEST_BASE_URL` por la URL correspondiente, por ejemplo
 Resultado esperado:
 
 ```
-Pruebas: 131  Fallos: 0
-Pruebas: 143  Fallos: 0
+Pruebas: 160  Fallos: 0
+Pruebas: 175  Fallos: 0
 ```
 
 ## 6. Comprobar la instalación en phpMyAdmin
@@ -151,7 +151,7 @@ En `familycoins` deben aparecer, entre otras, estas tablas:
 - `usuarios`, `parejas`, `predefinidos`, `eventos`, `recargas`, `configuracion`
 - `pareja_streaks`, `pareja_streak_checkins`
 - `pareja_plantas`, `pareja_planta_cambios`
-- `tienda_items`, `pareja_tareas`, `pareja_bonos`
+- `tienda_items`, `pareja_tareas`, `pareja_bonos`, `pareja_recuerdos`
 
 La tabla `tienda_items` debe tener 11 filas con `pareja_id` a `NULL` (catálogo
 global).
