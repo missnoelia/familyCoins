@@ -12,12 +12,13 @@ El Backend está desarrollado en **PHP 8** y utiliza **MySQL/MariaDB**. La
 comunicación con el Frontend se hace mediante una API REST que devuelve siempre
 JSON.
 
-Alcance implementado en esta fase: **sprints 1 a 6**. Incluye saldos,
-estadísticas por periodo, administración de usuarios y parejas, cambio de
-contraseña, un endpoint de salud, la racha compartida de pareja, la planta
-compartida que crece con la racha, la tienda de pareja con tareas confirmadas y
-los bonos automáticos por cumpleaños y aniversario. Los endpoints de
-administración requieren rol `superadmin`.
+Alcance implementado: **sprints 1 a 6** y las ampliaciones posteriores de
+recuerdos, logros y dos plantas por pareja. Incluye saldos, estadísticas por
+periodo, administración de usuarios y parejas, cambio de contraseña, un endpoint
+de salud, la racha compartida de pareja, una planta por cada miembro que crece
+con la racha, la tienda de pareja con tareas confirmadas, los bonos automáticos
+por cumpleaños y aniversario, los recuerdos compartidos y los logros calculados
+con datos reales. Los endpoints de administración requieren rol `superadmin`.
 
 ## 2. Configuración general
 
@@ -176,9 +177,9 @@ Cierra la sesión actual. No requiere estar autenticado.
 ### GET `/api/check_login.php`
 
 Indica si hay sesión activa, si el usuario tiene pareja, el estado de la racha
-compartida, la planta de la pareja y los bonos entregados en esta llamada. Con
-sesión y pareja, esta llamada registra automáticamente la entrada del día en la
-racha y procesa los bonos de cumpleaños y aniversario.
+compartida, las dos plantas de la pareja y los bonos entregados en esta llamada.
+Con sesión y pareja, esta llamada registra automáticamente la entrada del día en
+la racha y procesa los bonos de cumpleaños y aniversario.
 
 **Respuesta sin sesión (200):**
 
@@ -260,7 +261,9 @@ racha y procesa los bonos de cumpleaños y aniversario.
 ```
 
 Los arrays `catalogo` y `etapas` del ejemplo están abreviados; su contenido
-completo se documenta en la sección de la planta compartida.
+completo se documenta en la sección de las plantas de la pareja. El objeto
+`planta` de `check_login.php` es el mismo estado que devuelve `planta.php`, con
+`mi_planta` y el array `plantas` para los dos miembros.
 
 Si la cuenta fue dada de baja mientras la sesión estaba abierta, se cierra la
 sesión y se devuelve `logged: false`. Si el usuario no tiene pareja, `streak`,
@@ -367,9 +370,9 @@ día. Repetir la entrada el mismo día no duplica nada.
   sube una unidad.
 - Si se salta uno o más días, al completar el nuevo día la racha vuelve a `1`.
 - `racha_maxima` guarda el mejor valor histórico de la pareja.
-- Completar un día también suma un día de crecimiento a la planta compartida
-  (ver sección 8). Consultar la racha aplica antes cualquier rotura o reinicio
-  pendiente de la planta.
+- Completar un día también suma un día de crecimiento a las dos plantas de la
+  pareja (ver sección 8). Consultar la racha aplica antes cualquier rotura o
+  reinicio pendiente de las plantas.
 - Si el último día completo no es hoy ni ayer, la consulta devuelve
   `racha_actual: 0` aunque todavía no se haya completado un día nuevo.
 - Requiere tener pareja: si no la hay, se devuelve `403`.
@@ -498,10 +501,11 @@ Actualiza la fecha de aniversario de la pareja. Requiere sesión y pareja.
 - Al vincular una pareja o crearla desde administración, la fecha se inicializa
   con el día de la vinculación.
 
-## 8. Planta compartida
+## 8. Plantas de la pareja
 
-Cada pareja tiene **una única planta compartida**. La planta crece cuando la
-pareja completa un día de racha y se degrada cuando la racha se rompe.
+Cada pareja tiene **dos plantas, una por cada miembro**. Cada persona elige y
+cambia su propia especie. Las dos plantas crecen a la vez cuando la pareja
+completa un día de racha y se degradan cuando la racha se rompe.
 
 ### Catálogo y etapas
 
@@ -529,26 +533,32 @@ siguiente:
 
 ### Reglas de crecimiento
 
-- Cada día de racha completado suma **un día de crecimiento** a la planta.
-- Al llegar al umbral de la etapa actual, la planta sube de etapa y el progreso
+- Cada día de racha completado suma **un día de crecimiento** a **cada una** de
+  las dos plantas.
+- Cada planta avanza por su cuenta: conserva su especie, su etapa y su progreso.
+  Al llegar al umbral de la etapa actual, la planta sube de etapa y el progreso
   continúa con el sobrante.
-- En floración (etapa 4) el progreso se queda a cero y la planta ya no crece más.
-- Si pasan **2 o más días** sin completar la racha, la planta pierde exactamente
-  **una etapa** y el progreso vuelve a cero. La pérdida se aplica una sola vez
+- En floración (etapa 4) el progreso se queda a cero y esa planta ya no crece más.
+- Si pasan **2 o más días** sin completar la racha, cada planta pierde exactamente
+  **una etapa** y su progreso vuelve a cero. La pérdida se aplica una sola vez
   por cada último día completo.
-- Si pasan **4 o más días** sin completar la racha, la planta vuelve a semilla y
+- Si pasan **4 o más días** sin completar la racha, cada planta vuelve a semilla y
   el progreso se pone a cero, pero se conserva `etapa_maxima` como histórico.
-  El reinicio tiene prioridad sobre la pérdida de una etapa, así que una pareja
-  que vuelve después de cuatro días o más encuentra la planta en semilla.
-- La primera planta elegida es gratuita. Cambiar de planta cuesta **20 coins** y
-  conserva la etapa y el progreso alcanzados.
+  El reinicio tiene prioridad sobre la pérdida de una etapa.
+- La primera planta de cada miembro es gratuita. Cambiar la propia planta cuesta
+  **20 coins**, se paga con el saldo de esa persona y conserva su etapa y su
+  progreso.
 - El cambio de planta crea un evento `resta` de origen `planta`, por lo que
   aparece en el historial y en las estadísticas.
 
 ### GET `/api/planta.php`
 
-Requiere sesión y pareja. Devuelve el catálogo, las etapas, los umbrales y el
-estado actual. Si la pareja todavía no ha elegido planta, `planta` es `null`.
+Requiere sesión y pareja. Devuelve el catálogo, las etapas, los umbrales y las
+dos plantas de la pareja. `mi_planta` es la planta del usuario autenticado y
+`plantas` incluye a los dos miembros con `usuario_id`, `nombre_usuario`,
+`es_mia` y `planta`. Si un miembro todavía no ha elegido planta, su `planta` es
+`null`. El campo `planta` se mantiene como alias de `mi_planta` para no romper a
+los clientes anteriores.
 
 ```json
 {
@@ -571,30 +581,59 @@ estado actual. Si la pareja todavía no ha elegido planta, `planta` es `null`.
         "planta": {
             "planta_id": "monstera",
             "nombre": "Monstera",
-            "descripcion": "Hojas grandes y exuberantes para una pareja que crece junta.",
             "etapa": 2,
             "etapa_id": "joven",
-            "etapa_nombre": "Joven",
-            "etapa_maxima": 2,
-            "etapa_maxima_id": "joven",
-            "progreso_dias": 2,
-            "dias_para_siguiente": 5,
-            "progreso_etapa": 28,
-            "completada": false,
-            "elegida_por_id": 1,
-            "elegida_en": "2026-11-10 19:30:00",
-            "updated_at": "2026-11-25 09:00:00"
-        }
+            "progreso_dias": 2
+        },
+        "mi_planta": {
+            "planta_id": "monstera",
+            "nombre": "Monstera",
+            "etapa": 2,
+            "etapa_id": "joven",
+            "progreso_dias": 2
+        },
+        "plantas": [
+            {
+                "usuario_id": 1,
+                "nombre_usuario": "Daria",
+                "es_mia": true,
+                "planta": {
+                    "planta_id": "monstera",
+                    "nombre": "Monstera",
+                    "descripcion": "Hojas grandes y exuberantes para una pareja que crece junta.",
+                    "etapa": 2,
+                    "etapa_id": "joven",
+                    "etapa_nombre": "Joven",
+                    "etapa_maxima": 2,
+                    "etapa_maxima_id": "joven",
+                    "progreso_dias": 2,
+                    "dias_para_siguiente": 5,
+                    "progreso_etapa": 28,
+                    "completada": false,
+                    "elegida_por_id": 1,
+                    "elegida_en": "2026-11-10 19:30:00",
+                    "updated_at": "2026-11-25 09:00:00"
+                }
+            },
+            {
+                "usuario_id": 2,
+                "nombre_usuario": "Alex",
+                "es_mia": false,
+                "planta": null
+            }
+        ]
     }
 }
 ```
 
-Los arrays `catalogo` y `etapas` del ejemplo están abreviados. `progreso_etapa`
-es el porcentaje entero de avance dentro de la etapa actual.
+Los arrays `catalogo` y `etapas` del ejemplo están abreviados. `planta` y
+`mi_planta` contienen el mismo objeto que `plantas[n].planta` del usuario
+autenticado. `progreso_etapa` es el porcentaje entero de avance dentro de la
+etapa actual.
 
 ### POST `/api/planta_elegir.php`
 
-Elige la primera planta o cambia la actual.
+Elige la primera planta del usuario autenticado o cambia la suya.
 
 ```json
 {
@@ -603,10 +642,11 @@ Elige la primera planta o cambia la actual.
 ```
 
 - `planta_id` debe existir en el catálogo; si no, `400`.
-- La primera elección es gratuita y empieza en semilla.
+- La primera elección de cada miembro es gratuita y empieza en semilla.
 - Elegir la misma planta no tiene coste ni modifica el progreso.
-- Cambiar de planta cuesta 20 coins. Si no hay saldo suficiente: `409`.
-- El cambio conserva la etapa y el progreso.
+- Cambiar de planta cuesta 20 coins y se descuenta del saldo del usuario que
+  hace el cambio. Si no hay saldo suficiente: `409`.
+- El cambio conserva la etapa y el progreso de esa persona.
 - La respuesta incluye el estado completo en `data` y el coste aplicado en
   `coste` (`0` o `20`).
 
@@ -1372,7 +1412,88 @@ datos responde o `503` si no:
 }
 ```
 
-## 18. Seguridad y control de acceso
+## 18. Recuerdos y logros
+
+### GET `/api/recuerdos_list.php`
+
+Requiere sesión y pareja. Lista los recuerdos de la pareja, del más reciente al
+más antiguo por `fecha` y luego por `id`. Cada recuerdo incluye el nombre de
+quien lo creó.
+
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": 2,
+            "pareja_id": 1,
+            "creado_por_id": 2,
+            "titulo": "Aniversario",
+            "fecha": "2026-06-01",
+            "nota": "Cena especial.",
+            "created_at": "2026-06-01 21:00:00",
+            "creado_por_nombre": "Alex"
+        }
+    ],
+    "meta": { "total": 1 }
+}
+```
+
+### POST `/api/recuerdo_create.php`
+
+Requiere sesión y pareja.
+
+```json
+{
+    "titulo": "Primer viaje",
+    "fecha": "2026-05-01",
+    "nota": "Fuimos a la playa."
+}
+```
+
+- `titulo`: obligatorio, máximo 100 caracteres.
+- `fecha`: obligatoria y debe ser una fecha real `YYYY-MM-DD`.
+- `nota`: obligatoria, máximo 255 caracteres.
+- Devuelve `201` con el recuerdo creado en `data`.
+- Errores de validación: `400`. Sin sesión: `401`. Sin pareja: `403`.
+
+### GET `/api/logros.php`
+
+Requiere sesión y pareja. Calcula los logros al vuelo con los datos reales, sin
+guardar una tabla de logros. Cada logro incluye `id`, `titulo`, `detalle`,
+`emoji`, `desbloqueado`, `progreso` y `objetivo`.
+
+| `id` | Logro | Cómo se desbloquea |
+|---|---|---|
+| `first-care` | Primer cuidado | Al menos un check-in de la pareja |
+| `week` | Una semana creciendo | `racha_maxima >= 7` |
+| `together` | En equipo | Al menos un día completado por los dos |
+| `month` | Un mes de constancia | `racha_maxima >= 30` |
+| `collector` | Pequeños coleccionistas | 3 artículos distintos comprados en la tienda |
+
+Para `week` y `month` se usa `racha_maxima`, no la racha actual, para que un
+logro no vuelva a bloquearse si la racha baja. En `collector` cuentan las tareas
+en estado `pendiente` o `cumplida`; las rechazadas y canceladas no suman.
+
+```json
+{
+    "success": true,
+    "data": [
+        {
+            "id": "first-care",
+            "titulo": "Primer cuidado",
+            "detalle": "Cuidar una planta por primera vez",
+            "emoji": "🌱",
+            "desbloqueado": true,
+            "progreso": 1,
+            "objetivo": 1
+        }
+    ],
+    "meta": { "total": 5, "desbloqueados": 1 }
+}
+```
+
+## 19. Seguridad y control de acceso
 
 - Contraseñas con `password_hash()` y `password_verify()`, con un máximo de 72
   bytes para bcrypt.
@@ -1383,6 +1504,9 @@ datos responde o `503` si no:
 - Consultas con sentencias preparadas de PDO y listas blancas para ordenación.
 - Validación de fechas reales, enteros positivos, emails, códigos y longitudes.
 - Control de propiedad de predefinidos, eventos, recargas y saldos.
+- Los recuerdos se filtran siempre por `pareja_id`: un usuario no puede ver los
+  de otra pareja. Los logros también se calculan solo con los datos de la pareja
+  autenticada.
 - Los eventos del sistema (`tienda`, `tarea`, `bono` y `planta`) están
   protegidos: no se pueden modificar ni anular desde el historial manual.
 - La tienda limita los artículos personalizados a 15 por pareja y el coste a
@@ -1401,7 +1525,7 @@ datos responde o `503` si no:
 - Los errores de base de datos se registran en el log y no se muestran al
   cliente.
 
-## 19. Resumen de endpoints implementados
+## 20. Resumen de endpoints implementados
 
 | Funcionalidad | Método | Endpoint |
 |---|---|---|
@@ -1421,6 +1545,9 @@ datos responde o `503` si no:
 | Actualizar aniversario | POST | `pareja_aniversario.php` |
 | Estado de la planta | GET | `planta.php` |
 | Elegir o cambiar planta | POST | `planta_elegir.php` |
+| Listar recuerdos | GET | `recuerdos_list.php` |
+| Crear recuerdo | POST | `recuerdo_create.php` |
+| Consultar logros | GET | `logros.php` |
 | Ver la tienda | GET | `tienda.php` |
 | Crear artículo propio | POST | `tienda_item_create.php` |
 | Modificar artículo propio | POST | `tienda_item_update.php` |
@@ -1460,7 +1587,7 @@ datos responde o `503` si no:
 | Listar recargas (admin) | GET | `admin_recargas_list.php` |
 | Estadísticas globales (admin) | GET | `admin_stats.php` |
 
-## 20. Notas sobre `db/schema.sql`
+## 21. Notas sobre `db/schema.sql`
 
 `db/schema.sql` es el esquema canónico para MySQL/MariaDB (probado con MariaDB
 10.4 de XAMPP) y ya incluye todas las tablas de esta fase. Todas las tablas usan
@@ -1470,9 +1597,12 @@ de tiempo son `DATETIME DEFAULT CURRENT_TIMESTAMP`.
 
 - **Racha:** `pareja_streaks` (contador por pareja) y `pareja_streak_checkins`
   (una entrada por usuario y día), con el índice `idx_streak_checkins_fecha`.
-- **Planta:** `pareja_plantas` (una fila por pareja con especie, etapa,
-  progreso y marcas de degradación/reinicio) y `pareja_planta_cambios`
-  (histórico de cambios con su evento asociado).
+- **Plantas:** `pareja_plantas` (una fila por pareja y usuario, con clave
+  primaria `(pareja_id, usuario_id)`, especie, etapa, progreso y marcas de
+  degradación/reinicio) y `pareja_planta_cambios` (histórico de cambios con su
+  evento asociado).
+- **Recuerdos:** `pareja_recuerdos` (título, fecha, nota y autor) con el índice
+  `idx_pareja_recuerdos_fecha` sobre `(pareja_id, fecha)`.
 - **Tienda:** `tienda_items`. Los artículos globales tienen `clave` y
   `pareja_id NULL`; los personalizados tienen `pareja_id`. Incluye
   `idx_tienda_items_pareja`. El esquema inserta los 11 artículos globales con

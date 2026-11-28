@@ -176,6 +176,7 @@ function comprobarIgual(string $descripcion, mixed $esperado, mixed $obtenido): 
 function limpiarBase(PDO $db): void
 {
     // DELETE conserva el catálogo global de tienda_items (pareja_id NULL).
+    $db->exec('DELETE FROM pareja_recuerdos');
     $db->exec('DELETE FROM pareja_bonos');
     $db->exec('DELETE FROM pareja_tareas');
     $db->exec('DELETE FROM pareja_planta_cambios');
@@ -572,6 +573,39 @@ try {
         'planta_id' => 'planta_inventada',
     ], 'daria'));
 
+    $plantaIntrusoInicial = http('GET', '/api/planta.php', null, 'intruso');
+    esperarEstado('Intruso consulta sus plantas', 200, $plantaIntrusoInicial);
+    comprobar('Intruso aún no ha elegido planta', datos($plantaIntrusoInicial, 'data.mi_planta') === null);
+    comprobarIgual(
+        'la pareja tiene dos huecos de planta',
+        2,
+        count((array) datos($plantaIntrusoInicial, 'data.plantas'))
+    );
+
+    $eleccionIntruso = http('POST', '/api/planta_elegir.php', [
+        'planta_id' => 'girasol',
+    ], 'intruso');
+    esperarEstado('Intruso elige su primera planta', 200, $eleccionIntruso);
+    comprobar(
+        'Intruso elige su propia especie',
+        datos($eleccionIntruso, 'data.mi_planta.planta_id') === 'girasol'
+    );
+
+    $plantasPareja = [];
+
+    foreach ((array) datos($eleccionIntruso, 'data.plantas') as $entrada) {
+        $plantasPareja[(int) $entrada['usuario_id']] = $entrada;
+    }
+
+    comprobar(
+        'la planta de Daria sigue siendo cactus',
+        $plantasPareja[$id1]['planta']['planta_id'] === 'cactus'
+    );
+    comprobar(
+        'Intruso tiene girasol',
+        $plantasPareja[$id3]['planta']['planta_id'] === 'girasol'
+    );
+
     echo "\n== Tienda y tareas ==\n";
 
     $tiendaHttp = http('GET', '/api/tienda.php', null, 'daria');
@@ -778,6 +812,99 @@ try {
     comprobar('los eventos de bono se registran', (int) $db->query(
         "SELECT COUNT(*) FROM eventos WHERE origen = 'bono'"
     )->fetchColumn() === 3);
+
+    echo "\n== Recuerdos y logros ==\n";
+
+    esperarEstado('los recuerdos exigen sesión', 401, http('GET', '/api/recuerdos_list.php'));
+    esperarEstado('los recuerdos exigen pareja', 403, http('GET', '/api/recuerdos_list.php', null, 'alex'));
+    esperarEstado('crear un recuerdo exige pareja', 403, http('POST', '/api/recuerdo_create.php', [
+        'titulo' => 'Sin pareja',
+        'fecha' => '2026-05-01',
+        'nota' => 'No debería guardarse.',
+    ], 'alex'));
+
+    $recuerdosVacios = http('GET', '/api/recuerdos_list.php', null, 'daria');
+    esperarEstado('la lista de recuerdos responde 200', 200, $recuerdosVacios);
+    comprobarIgual('la pareja empieza sin recuerdos', 0, (int) datos($recuerdosVacios, 'meta.total'));
+
+    esperarEstado('un recuerdo sin título se rechaza', 400, http('POST', '/api/recuerdo_create.php', [
+        'titulo' => '',
+        'fecha' => '2026-05-01',
+        'nota' => 'Sin título',
+    ], 'daria'));
+
+    esperarEstado('un recuerdo con fecha inválida se rechaza', 400, http('POST', '/api/recuerdo_create.php', [
+        'titulo' => 'Fecha mala',
+        'fecha' => '2026-13-40',
+        'nota' => 'Fecha imposible',
+    ], 'daria'));
+
+    esperarEstado('un recuerdo sin nota se rechaza', 400, http('POST', '/api/recuerdo_create.php', [
+        'titulo' => 'Sin nota',
+        'fecha' => '2026-05-01',
+        'nota' => '',
+    ], 'daria'));
+
+    $recuerdoHttp = http('POST', '/api/recuerdo_create.php', [
+        'titulo' => 'Primer viaje',
+        'fecha' => '2026-05-01',
+        'nota' => 'Fuimos a la playa.',
+    ], 'daria');
+    esperarEstado('crear un recuerdo responde 201', 201, $recuerdoHttp);
+    comprobar('el recuerdo guarda su autor', datos($recuerdoHttp, 'data.creado_por_nombre') === 'Daria');
+
+    $recuerdosPareja = http('GET', '/api/recuerdos_list.php', null, 'intruso');
+    esperarEstado('la pareja ve los recuerdos', 200, $recuerdosPareja);
+    comprobarIgual('la pareja ve un recuerdo', 1, (int) datos($recuerdosPareja, 'meta.total'));
+    comprobar('el recuerdo es el creado', datos($recuerdosPareja, 'data.0.titulo') === 'Primer viaje');
+
+    esperarEstado('recuerdo_create solo acepta POST', 405, http(
+        'GET',
+        '/api/recuerdo_create.php',
+        null,
+        'daria'
+    ));
+
+    esperarEstado('los logros exigen sesión', 401, http('GET', '/api/logros.php'));
+    esperarEstado('los logros exigen pareja', 403, http('GET', '/api/logros.php', null, 'alex'));
+
+    esperarEstado('check-in de Daria para los logros', 200, http(
+        'POST',
+        '/api/streak_checkin.php',
+        null,
+        'daria'
+    ));
+    esperarEstado('check-in de Intruso para los logros', 200, http(
+        'POST',
+        '/api/streak_checkin.php',
+        null,
+        'intruso'
+    ));
+
+    $logrosHttp = http('GET', '/api/logros.php', null, 'daria');
+    esperarEstado('los logros responden 200', 200, $logrosHttp);
+    comprobarIgual('hay cinco logros', 5, (int) datos($logrosHttp, 'meta.total'));
+
+    $logrosPorId = [];
+
+    foreach ((array) datos($logrosHttp, 'data') as $logro) {
+        $logrosPorId[$logro['id']] = $logro;
+    }
+
+    comprobar(
+        'el primer cuidado está desbloqueado',
+        $logrosPorId['first-care']['desbloqueado'] === true
+    );
+    comprobar(
+        'el logro en equipo está desbloqueado',
+        $logrosPorId['together']['desbloqueado'] === true
+    );
+    comprobar('la semana sigue bloqueada', $logrosPorId['week']['desbloqueado'] === false);
+    comprobar('el mes sigue bloqueado', $logrosPorId['month']['desbloqueado'] === false);
+    comprobar(
+        'el coleccionista sigue bloqueado con dos artículos',
+        $logrosPorId['collector']['desbloqueado'] === false
+    );
 
     echo "\n== Protección de eventos del sistema ==\n";
 

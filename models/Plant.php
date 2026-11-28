@@ -2,11 +2,12 @@
 declare(strict_types=1);
 
 /**
- * Planta compartida de una pareja.
+ * Plantas de una pareja: una por cada miembro.
  *
- * La planta crece cuando la pareja completa un día de racha. Si la racha se
- * rompe pierde una etapa y, tras cuatro días sin renovarse, vuelve a semilla
- * conservando la mejor etapa alcanzada.
+ * Cada persona elige y cambia su propia planta. Las dos plantas crecen cuando
+ * la pareja completa un día de racha. Si la racha se rompe, ambas pierden una
+ * etapa y, tras cuatro días sin renovarse, vuelven a semilla conservando la
+ * mejor etapa alcanzada.
  */
 class Plant
 {
@@ -88,7 +89,11 @@ class Plant
     }
 
     /**
-     * Estado completo de la planta de la pareja del usuario.
+     * Estado de las dos plantas de la pareja del usuario.
+     *
+     * `planta` se mantiene como alias de la planta del usuario autenticado para
+     * no romper a los clientes anteriores. `mi_planta` y `plantas` son los
+     * campos nuevos con la información de ambos miembros.
      *
      * @return array<string, mixed>
      */
@@ -97,7 +102,29 @@ class Plant
         $pareja = $this->getPareja($usuarioId);
         $this->sincronizar($pareja['id']);
 
-        $fila = $this->getFila($pareja['id']);
+        $miembros = [$pareja['usuario_1_id'], $pareja['usuario_2_id']];
+        $filas = $this->getFilas($pareja['id']);
+        $nombres = $this->getNombres($miembros);
+
+        $plantas = [];
+        $miPlanta = null;
+
+        foreach ($miembros as $miembroId) {
+            $fila = $filas[$miembroId] ?? null;
+            $planta = $fila === null ? null : $this->formatear($fila);
+            $esMia = $miembroId === $usuarioId;
+
+            if ($esMia) {
+                $miPlanta = $planta;
+            }
+
+            $plantas[] = [
+                'usuario_id' => $miembroId,
+                'nombre_usuario' => $nombres[$miembroId] ?? '',
+                'es_mia' => $esMia,
+                'planta' => $planta,
+            ];
+        }
 
         return [
             'pareja_id' => $pareja['id'],
@@ -106,14 +133,16 @@ class Plant
             'etapas' => self::getEtapas(),
             'umbrales' => self::UMBRALES,
             'coste_cambio' => self::COSTE_CAMBIO,
-            'planta' => $fila === null ? null : $this->formatear($fila),
+            'planta' => $miPlanta,
+            'mi_planta' => $miPlanta,
+            'plantas' => $plantas,
         ];
     }
 
     /**
-     * Elige la primera planta (gratis) o cambia la actual (20 coins).
+     * Elige la primera planta del usuario (gratis) o cambia la suya (20 coins).
      *
-     * El cambio conserva la etapa y el progreso alcanzados.
+     * El cambio conserva la etapa y el progreso de esa persona.
      *
      * @return array{estado: array<string, mixed>, coste: int}
      */
@@ -142,19 +171,21 @@ class Plant
                 throw new ApiException('La pareja ya no existe.', 409);
             }
 
-            $fila = $this->getFila($parejaId, true);
+            $fila = $this->getFila($parejaId, $usuarioId, true);
 
             if ($fila === null) {
                 $stmt = $this->db->prepare(
                     'INSERT INTO pareja_plantas
-                        (pareja_id, planta_id, etapa, etapa_maxima, progreso_dias,
-                         elegida_por_id, elegida_en, updated_at)
+                        (pareja_id, usuario_id, planta_id, etapa, etapa_maxima,
+                         progreso_dias, elegida_por_id, elegida_en, updated_at)
                      VALUES
-                        (:pareja_id, :planta_id, 0, 0, 0, :usuario_id, NOW(), NOW())'
+                        (:pareja_id, :usuario_id, :planta_id, 0, 0, 0,
+                         :elegida_por_id, NOW(), NOW())'
                 );
                 $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
-                $stmt->bindValue(':planta_id', $plantaId, PDO::PARAM_STR);
                 $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
+                $stmt->bindValue(':planta_id', $plantaId, PDO::PARAM_STR);
+                $stmt->bindValue(':elegida_por_id', $usuarioId, PDO::PARAM_INT);
                 $stmt->execute();
             } elseif ($fila['planta_id'] === $plantaId) {
                 // Elegir la misma planta no tiene coste ni cambia el progreso.
@@ -186,11 +217,12 @@ class Plant
                          elegida_por_id = :usuario_id,
                          elegida_en = NOW(),
                          updated_at = NOW()
-                     WHERE pareja_id = :pareja_id'
+                     WHERE pareja_id = :pareja_id AND usuario_id = :usuario_actual'
                 );
                 $stmt->bindValue(':planta_id', $plantaId, PDO::PARAM_STR);
                 $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
                 $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
+                $stmt->bindValue(':usuario_actual', $usuarioId, PDO::PARAM_INT);
                 $stmt->execute();
 
                 $stmt = $this->db->prepare(
@@ -226,8 +258,10 @@ class Plant
     }
 
     /**
-     * Aplica rotura o reinicio según los días transcurridos desde el último día
-     * completo de la racha. Es idempotente para el mismo último día.
+     * Aplica rotura o reinicio a todas las plantas de la pareja según los días
+     * transcurridos desde el último día completo de la racha.
+     *
+     * Es idempotente para el mismo último día y para cada planta.
      */
     public function sincronizar(int $parejaId): void
     {
@@ -238,9 +272,13 @@ class Plant
         }
 
         try {
-            $fila = $this->getFila($parejaId, true);
+            $stmt = $this->db->prepare(
+                'SELECT COUNT(*) FROM pareja_plantas WHERE pareja_id = :pareja_id'
+            );
+            $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
+            $stmt->execute();
 
-            if ($fila === null) {
+            if ((int) $stmt->fetchColumn() === 0) {
                 if ($propia) {
                     $this->db->commit();
                 }
@@ -261,31 +299,34 @@ class Plant
 
             $dias = $this->diferenciaDias($ultimo, api_hoy()->format('Y-m-d'));
 
-            if ($dias >= self::DIAS_REINICIO && $fila['reiniciada_para'] !== $ultimo) {
+            if ($dias >= self::DIAS_REINICIO) {
                 $stmt = $this->db->prepare(
                     'UPDATE pareja_plantas
                      SET etapa = 0,
                          progreso_dias = 0,
                          reiniciada_para = :ultimo,
                          updated_at = NOW()
-                     WHERE pareja_id = :pareja_id'
+                     WHERE pareja_id = :pareja_id
+                       AND (reiniciada_para IS NULL OR reiniciada_para <> :ultimo_control)'
                 );
                 $stmt->bindValue(':ultimo', $ultimo, PDO::PARAM_STR);
+                $stmt->bindValue(':ultimo_control', $ultimo, PDO::PARAM_STR);
                 $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
                 $stmt->execute();
-            } elseif ($dias >= 2
-                && $fila['degradada_para'] !== $ultimo
-                && $fila['reiniciada_para'] !== $ultimo
-            ) {
+            } elseif ($dias >= 2) {
                 $stmt = $this->db->prepare(
                     'UPDATE pareja_plantas
                      SET etapa = GREATEST(0, etapa - 1),
                          progreso_dias = 0,
                          degradada_para = :ultimo,
                          updated_at = NOW()
-                     WHERE pareja_id = :pareja_id'
+                     WHERE pareja_id = :pareja_id
+                       AND (degradada_para IS NULL OR degradada_para <> :degradada_control)
+                       AND (reiniciada_para IS NULL OR reiniciada_para <> :reiniciada_control)'
                 );
                 $stmt->bindValue(':ultimo', $ultimo, PDO::PARAM_STR);
+                $stmt->bindValue(':degradada_control', $ultimo, PDO::PARAM_STR);
+                $stmt->bindValue(':reiniciada_control', $ultimo, PDO::PARAM_STR);
                 $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
                 $stmt->execute();
             }
@@ -303,7 +344,8 @@ class Plant
     }
 
     /**
-     * Suma un día de crecimiento por un día de racha completado.
+     * Suma un día de crecimiento a todas las plantas de la pareja por un día de
+     * racha completado.
      *
      * Debe llamarse dentro de la transacción de Streak::registrarEntrada().
      */
@@ -316,9 +358,20 @@ class Plant
         }
 
         try {
-            $fila = $this->getFila($parejaId, true);
+            $stmt = $this->db->prepare(
+                'SELECT pareja_id, usuario_id, planta_id, etapa, etapa_maxima,
+                        progreso_dias, degradada_para, reiniciada_para,
+                        elegida_por_id, elegida_en, updated_at
+                 FROM pareja_plantas
+                 WHERE pareja_id = :pareja_id
+                 FOR UPDATE'
+            );
+            $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
+            $stmt->execute();
 
-            if ($fila === null) {
+            $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if ($filas === []) {
                 if ($propia) {
                     $this->db->commit();
                 }
@@ -326,35 +379,39 @@ class Plant
                 return;
             }
 
-            $etapa = (int) $fila['etapa'];
-            $progreso = (int) $fila['progreso_dias'] + 1;
-            $maxima = (int) $fila['etapa_maxima'];
-
-            while ($etapa < 4 && $progreso >= self::UMBRALES[$etapa]) {
-                $progreso -= self::UMBRALES[$etapa];
-                $etapa++;
-            }
-
-            if ($etapa >= 4) {
-                $etapa = 4;
-                $progreso = 0;
-            }
-
-            $maxima = max($maxima, $etapa);
-
-            $stmt = $this->db->prepare(
+            $update = $this->db->prepare(
                 'UPDATE pareja_plantas
                  SET etapa = :etapa,
                      etapa_maxima = :etapa_maxima,
                      progreso_dias = :progreso,
                      updated_at = NOW()
-                 WHERE pareja_id = :pareja_id'
+                 WHERE pareja_id = :pareja_id AND usuario_id = :usuario_id'
             );
-            $stmt->bindValue(':etapa', $etapa, PDO::PARAM_INT);
-            $stmt->bindValue(':etapa_maxima', $maxima, PDO::PARAM_INT);
-            $stmt->bindValue(':progreso', $progreso, PDO::PARAM_INT);
-            $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
-            $stmt->execute();
+
+            foreach ($filas as $fila) {
+                $etapa = (int) $fila['etapa'];
+                $progreso = (int) $fila['progreso_dias'] + 1;
+                $maxima = (int) $fila['etapa_maxima'];
+
+                while ($etapa < 4 && $progreso >= self::UMBRALES[$etapa]) {
+                    $progreso -= self::UMBRALES[$etapa];
+                    $etapa++;
+                }
+
+                if ($etapa >= 4) {
+                    $etapa = 4;
+                    $progreso = 0;
+                }
+
+                $maxima = max($maxima, $etapa);
+
+                $update->bindValue(':etapa', $etapa, PDO::PARAM_INT);
+                $update->bindValue(':etapa_maxima', $maxima, PDO::PARAM_INT);
+                $update->bindValue(':progreso', $progreso, PDO::PARAM_INT);
+                $update->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
+                $update->bindValue(':usuario_id', (int) $fila['usuario_id'], PDO::PARAM_INT);
+                $update->execute();
+            }
 
             if ($propia) {
                 $this->db->commit();
@@ -387,14 +444,42 @@ class Plant
     }
 
     /**
+     * Plantas de la pareja indexadas por usuario_id.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function getFilas(int $parejaId): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT pareja_id, usuario_id, planta_id, etapa, etapa_maxima,
+                    progreso_dias, degradada_para, reiniciada_para,
+                    elegida_por_id, elegida_en, updated_at
+             FROM pareja_plantas
+             WHERE pareja_id = :pareja_id'
+        );
+        $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $filas = [];
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+            $normalizada = $this->normalizarFila($fila);
+            $filas[$normalizada['usuario_id']] = $normalizada;
+        }
+
+        return $filas;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
-    private function getFila(int $parejaId, bool $bloquear = false): ?array
+    private function getFila(int $parejaId, int $usuarioId, bool $bloquear = false): ?array
     {
-        $sql = 'SELECT pareja_id, planta_id, etapa, etapa_maxima, progreso_dias,
-                       degradada_para, reiniciada_para, elegida_por_id, elegida_en, updated_at
+        $sql = 'SELECT pareja_id, usuario_id, planta_id, etapa, etapa_maxima,
+                       progreso_dias, degradada_para, reiniciada_para,
+                       elegida_por_id, elegida_en, updated_at
                 FROM pareja_plantas
-                WHERE pareja_id = :pareja_id
+                WHERE pareja_id = :pareja_id AND usuario_id = :usuario_id
                 LIMIT 1';
 
         if ($bloquear) {
@@ -403,16 +488,45 @@ class Plant
 
         $stmt = $this->db->prepare($sql);
         $stmt->bindValue(':pareja_id', $parejaId, PDO::PARAM_INT);
+        $stmt->bindValue(':usuario_id', $usuarioId, PDO::PARAM_INT);
         $stmt->execute();
 
         $fila = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($fila === false) {
-            return null;
+        return $fila === false ? null : $this->normalizarFila($fila);
+    }
+
+    /**
+     * @param array<int, int> $usuarios
+     * @return array<int, string>
+     */
+    private function getNombres(array $usuarios): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT id, nombre FROM usuarios WHERE id IN (:usuario1, :usuario2)'
+        );
+        $stmt->bindValue(':usuario1', $usuarios[0], PDO::PARAM_INT);
+        $stmt->bindValue(':usuario2', $usuarios[1], PDO::PARAM_INT);
+        $stmt->execute();
+
+        $nombres = [];
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+            $nombres[(int) $fila['id']] = (string) $fila['nombre'];
         }
 
+        return $nombres;
+    }
+
+    /**
+     * @param array<string, mixed> $fila
+     * @return array<string, mixed>
+     */
+    private function normalizarFila(array $fila): array
+    {
         return [
             'pareja_id' => (int) $fila['pareja_id'],
+            'usuario_id' => (int) $fila['usuario_id'],
             'planta_id' => (string) $fila['planta_id'],
             'etapa' => (int) $fila['etapa'],
             'etapa_maxima' => (int) $fila['etapa_maxima'],

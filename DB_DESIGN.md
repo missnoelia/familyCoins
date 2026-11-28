@@ -68,12 +68,13 @@ Clave primaria compuesta: `(pareja_id, usuario_id, fecha)`. Índice adicional
 
 ### pareja_plantas
 
-Planta compartida de la pareja.
+Plantas de la pareja: una fila por cada miembro.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| pareja_id | INTEGER | Clave primaria y FK → parejas(id) |
-| planta_id | VARCHAR(40) | Especie elegida |
+| pareja_id | INTEGER | Clave primaria compuesta y FK → parejas(id) |
+| usuario_id | INTEGER | Clave primaria compuesta y FK → usuarios(id) |
+| planta_id | VARCHAR(40) | Especie elegida por ese miembro |
 | etapa | INTEGER | Etapa actual (0–4) |
 | etapa_maxima | INTEGER | Mejor etapa alcanzada (0–4) |
 | progreso_dias | INTEGER | Días de crecimiento en la etapa actual |
@@ -82,6 +83,10 @@ Planta compartida de la pareja.
 | elegida_por_id | INTEGER | FK → usuarios(id) |
 | elegida_en | DATETIME | Fecha de la elección |
 | updated_at | DATETIME | Por defecto la fecha actual |
+
+Clave primaria compuesta: `(pareja_id, usuario_id)`. Cada miembro puede tener una
+especie, etapa y progreso distintos, aunque los días de racha completados hacen
+crecer las dos plantas a la vez.
 
 ### predefinidos
 
@@ -192,6 +197,24 @@ Bonos automáticos ya entregados.
 Restricción única `(usuario_id, tipo, anio)`: cada bono se entrega una sola vez
 por persona, tipo y año.
 
+### pareja_recuerdos
+
+Recuerdos compartidos por la pareja.
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| id | INT AUTO_INCREMENT | Clave primaria |
+| pareja_id | INTEGER | FK → parejas(id) |
+| creado_por_id | INTEGER | FK → usuarios(id) |
+| titulo | VARCHAR(100) | Obligatorio |
+| fecha | DATE | Obligatorio |
+| nota | VARCHAR(255) | Obligatorio |
+| created_at | DATETIME | Por defecto la fecha actual |
+
+Índice `idx_pareja_recuerdos_fecha` sobre `(pareja_id, fecha)`. Los recuerdos se
+listan del más reciente al más antiguo y solo son visibles para los miembros de
+la pareja.
+
 ### recargas
 
 Suma coins a una persona.
@@ -222,9 +245,9 @@ Parámetros generales de la aplicación.
 - En `eventos`, `usuario_id` es quien recibe el efecto y `registrado_por_id` es
   quien lo apunta.
 - Los eventos no se borran: se marcan como anulados con `anulado = TRUE`.
-- Cada pareja tiene una fila en `pareja_streaks`, una en `pareja_plantas` y
-  muchas en `pareja_streak_checkins`, `pareja_planta_cambios`, `pareja_tareas` y
-  `pareja_bonos`.
+- Cada pareja tiene una fila en `pareja_streaks`, dos en `pareja_plantas` (una
+  por miembro) y muchas en `pareja_streak_checkins`, `pareja_planta_cambios`,
+  `pareja_tareas`, `pareja_bonos` y `pareja_recuerdos`.
 - Los artículos globales de la tienda (`pareja_id NULL`) son visibles para todas
   las parejas; los personalizados solo para la suya.
 - Los bonos referencian el evento `suma` que generaron y no se repiten gracias a

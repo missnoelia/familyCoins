@@ -58,6 +58,7 @@ function limpiar(PDO $db): void
 {
     // Se usa DELETE en lugar de TRUNCATE ... CASCADE para no borrar el
     // catálogo global de tienda_items, que no pertenece a ninguna pareja.
+    $db->exec('DELETE FROM pareja_recuerdos');
     $db->exec('DELETE FROM pareja_bonos');
     $db->exec('DELETE FROM pareja_tareas');
     $db->exec('DELETE FROM pareja_planta_cambios');
@@ -428,6 +429,58 @@ try {
         "SELECT progreso_dias FROM pareja_plantas WHERE pareja_id = {$parejaNueva}"
     )->fetchColumn());
 
+    echo "\n== Dos plantas por pareja ==\n";
+
+    $estadoU6Inicial = $plantModel->getEstado((int) $u6);
+    comprobarIgual('cada miembro tiene su hueco de planta', 2, count($estadoU6Inicial['plantas']));
+    comprobar('u6 aún no ha elegido planta', $estadoU6Inicial['mi_planta'] === null);
+
+    $plantasU6Inicial = [];
+
+    foreach ($estadoU6Inicial['plantas'] as $entrada) {
+        $plantasU6Inicial[(int) $entrada['usuario_id']] = $entrada;
+    }
+
+    comprobar('u5 ya tiene su propia planta', $plantasU6Inicial[(int) $u5]['planta'] !== null);
+
+    $primeraU6 = $plantModel->elegir((int) $u6, 'girasol');
+    comprobarIgual('la primera planta de u6 es gratis', 0, $primeraU6['coste']);
+    comprobarIgual('u6 elige su propia especie', 'girasol', $primeraU6['estado']['mi_planta']['planta_id']);
+
+    $estadoU5 = $plantModel->getEstado((int) $u5);
+    comprobarIgual('la planta de u5 no cambia', 'cactus', $estadoU5['mi_planta']['planta_id']);
+    comprobarIgual('el estado muestra las dos plantas', 2, count($estadoU5['plantas']));
+
+    $rechargeModel->create((int) $u6, 50, api_hoy()->format('Y-m-d'), 'Prueba dos plantas');
+    $saldoU5AntesCambio = $balanceModel->getSaldoUsuario((int) $u5);
+    $saldoU6AntesCambio = $balanceModel->getSaldoUsuario((int) $u6);
+    $cambioU6 = $plantModel->elegir((int) $u6, 'suculenta');
+    comprobarIgual('cambiar la planta de u6 cuesta 20', 20, $cambioU6['coste']);
+    comprobarIgual(
+        'el cambio lo paga u6',
+        $saldoU6AntesCambio - 20,
+        $balanceModel->getSaldoUsuario((int) $u6)
+    );
+    comprobarIgual(
+        'el cambio no toca el saldo de u5',
+        $saldoU5AntesCambio,
+        $balanceModel->getSaldoUsuario((int) $u5)
+    );
+
+    $plantModel->registrarDiaCompletado($parejaNueva);
+    $estadoU5TrasDia = $plantModel->getEstado((int) $u5);
+    $estadoU6TrasDia = $plantModel->getEstado((int) $u6);
+    comprobarIgual(
+        'el día completado avanza la planta de u5',
+        2,
+        $estadoU5TrasDia['mi_planta']['progreso_dias']
+    );
+    comprobarIgual(
+        'el día completado avanza la planta de u6',
+        1,
+        $estadoU6TrasDia['mi_planta']['progreso_dias']
+    );
+
     echo "\n== Tienda y tareas ==\n";
 
     $tienda = $shopModel->getTienda((int) $u5);
@@ -551,6 +604,99 @@ try {
     comprobarIgual('los bonos no se repiten el mismo año', 0, count($bonosRepetidos));
     comprobarIgual('el saldo no cambia al reprocesar', $saldoU5Antes + 100, $balanceModel->getSaldoUsuario((int) $u5));
     comprobarIgual('hay tres bonos registrados', 3, (int) $db->query('SELECT COUNT(*) FROM pareja_bonos')->fetchColumn());
+
+    echo "\n== Recuerdos y logros ==\n";
+
+    $memoryModel = new Memory($db);
+    $achievementModel = new Achievement($db);
+
+    comprobarIgual('la pareja empieza sin recuerdos', 0, count($memoryModel->getAll($parejaNueva)));
+
+    $recuerdo1 = $memoryModel->create(
+        $parejaNueva,
+        (int) $u5,
+        'Primer viaje',
+        '2026-05-01',
+        'Fuimos a la playa.'
+    );
+    comprobarIgual('el recuerdo guarda el título', 'Primer viaje', $recuerdo1['titulo']);
+    comprobarIgual('el recuerdo guarda su autor', 'Planta', $recuerdo1['creado_por_nombre']);
+
+    $memoryModel->create(
+        $parejaNueva,
+        (int) $u6,
+        'Aniversario',
+        '2026-06-01',
+        'Cena especial.'
+    );
+
+    $recuerdos = $memoryModel->getAll($parejaNueva);
+    comprobarIgual('la pareja ve sus dos recuerdos', 2, count($recuerdos));
+    comprobarIgual(
+        'los recuerdos se ordenan del más reciente al más antiguo',
+        'Aniversario',
+        $recuerdos[0]['titulo']
+    );
+    comprobarIgual(
+        'getById devuelve el recuerdo de la pareja',
+        'Primer viaje',
+        $memoryModel->getById((int) $recuerdo1['id'], $parejaNueva)['titulo']
+    );
+    comprobar(
+        'getById no devuelve recuerdos de otra pareja',
+        $memoryModel->getById((int) $recuerdo1['id'], $parejaId) === null
+    );
+
+    $logrosPorId = [];
+
+    foreach ($achievementModel->getLogros($parejaNueva) as $logro) {
+        $logrosPorId[$logro['id']] = $logro;
+    }
+
+    comprobarIgual('hay cinco logros', 5, count($logrosPorId));
+    comprobar(
+        'el primer cuidado se desbloquea con un check-in',
+        $logrosPorId['first-care']['desbloqueado'] === true
+    );
+    comprobar(
+        'el logro en equipo se desbloquea al cuidar juntos',
+        $logrosPorId['together']['desbloqueado'] === true
+    );
+    comprobar(
+        'la semana sigue bloqueada con la racha máxima actual',
+        $logrosPorId['week']['desbloqueado'] === false
+    );
+    comprobar('el mes sigue bloqueado', $logrosPorId['month']['desbloqueado'] === false);
+    comprobar(
+        'el coleccionista sigue bloqueado con dos artículos',
+        $logrosPorId['collector']['desbloqueado'] === false
+    );
+    comprobarIgual('el coleccionista muestra el progreso', 2, $logrosPorId['collector']['progreso']);
+
+    $tareaColeccion = $shopModel->crearTarea((int) $u5, (int) $itemsPorClave['masaje']['id']);
+    $shopModel->confirmarTarea((int) $u6, (int) $tareaColeccion['id']);
+    $db->exec(
+        "UPDATE pareja_streaks SET racha_maxima = 30 WHERE pareja_id = {$parejaNueva}"
+    );
+
+    $logrosFinales = [];
+
+    foreach ($achievementModel->getLogros($parejaNueva) as $logro) {
+        $logrosFinales[$logro['id']] = $logro;
+    }
+
+    comprobar(
+        'el coleccionista se desbloquea con tres artículos',
+        $logrosFinales['collector']['desbloqueado'] === true
+    );
+    comprobar(
+        'la semana se desbloquea con la racha máxima',
+        $logrosFinales['week']['desbloqueado'] === true
+    );
+    comprobar(
+        'el mes se desbloquea con la racha máxima',
+        $logrosFinales['month']['desbloqueado'] === true
+    );
 } catch (Throwable $e) {
     $fallos++;
     echo "\nEXCEPCIÓN: " . $e->getMessage() . "\n";

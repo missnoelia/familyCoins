@@ -16,9 +16,12 @@ Proyecto 2 del ciclo DAW.
 - Saldos individuales y conjunto de la pareja.
 - Estadísticas por mes, trimestre o año.
 - Racha compartida: el día cuenta cuando entran los dos miembros.
-- Planta compartida que crece con la racha y se degrada si se rompe.
+- Dos plantas, una por cada miembro, que crecen con la racha y se degradan si se
+  rompe.
 - Tienda de pareja con recompensas, permisos y tareas confirmadas.
 - Bonos automáticos de cumpleaños y aniversario.
+- Recuerdos compartidos de la pareja.
+- Logros calculados con datos reales (primer cuidado, rachas y colección).
 - Panel de administración de usuarios, parejas, eventos y recargas.
 
 ## Tecnologías
@@ -54,7 +57,7 @@ $env:TEST_BASE_URL = "http://127.0.0.1:8099"
 C:\xampp\php\php.exe tests\security_smoke.php
 ```
 
-Resultado esperado: **131 pruebas de modelos** y **143 pruebas HTTP**, sin
+Resultado esperado: **160 pruebas de modelos** y **175 pruebas HTTP**, sin
 fallos.
 
 ## Documentación

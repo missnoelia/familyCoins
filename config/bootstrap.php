@@ -538,6 +538,8 @@ require_once __DIR__ . '/../models/Streak.php';
 require_once __DIR__ . '/../models/Plant.php';
 require_once __DIR__ . '/../models/Shop.php';
 require_once __DIR__ . '/../models/Bonus.php';
+require_once __DIR__ . '/../models/Memory.php';
+require_once __DIR__ . '/../models/Achievement.php';
 
 set_exception_handler(static function (Throwable $e): void {
     if ($e instanceof ApiException) {

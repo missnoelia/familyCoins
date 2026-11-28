@@ -74,9 +74,11 @@ Los modelos principales son:
 | `Balance` | Saldos individuales y conjunto |
 | `Stats` | Estadísticas por periodo |
 | `Streak` | Racha compartida de la pareja |
-| `Plant` | Planta compartida y sus etapas |
+| `Plant` | Dos plantas por pareja (una por miembro) y sus etapas |
 | `Shop` | Tienda y tareas de la pareja |
 | `Bonus` | Bonos de cumpleaños y aniversario |
+| `Memory` | Recuerdos compartidos de la pareja |
+| `Achievement` | Logros calculados al vuelo con datos reales |
 
 ## Frontend
 
